@@ -37,3 +37,4 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: long-running end-to-end tests"]
