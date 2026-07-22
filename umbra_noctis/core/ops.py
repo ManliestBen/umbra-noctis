@@ -29,8 +29,8 @@ class Param:
     default: object = None
     lo: float | None = None      # slider bounds for numeric params
     hi: float | None = None
-    choices: tuple = ()
     doc: str = ""
+    choices: tuple = ()
 
 
 @dataclass

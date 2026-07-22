@@ -1,5 +1,8 @@
 # Dwarf 3 Post-Processing Application — Implementation Plan
 
+> **Status:** Phases 0–5 are built and tested as of v0.1 (July 2026) under the
+> name **Umbra Noctis**. Phase 6 is the live roadmap.
+
 Companion to `FEATURES.md`. This plan turns the feature catalog into an ordered build,
 with a recommended stack, architecture, and phase-by-phase milestones.
 
@@ -75,7 +78,7 @@ where we can do better or reduce friction.
 Key design decisions:
 
 1. **Engine/UI split with a CLI from day one.** Every operation is a pure function
-   `f(ImageData, params) -> ImageData` or a pipeline step. The GUI and the `d3proc`
+   `f(ImageData, params) -> ImageData` or a pipeline step. The GUI and the `umbra`
    CLI are both thin clients. This makes batch mode (§11 of FEATURES) free and makes
    the whole engine unit-testable without a display.
 2. **`ImageData` core type:** numpy array (float32 internally, CFA or RGB) + FITS
@@ -107,7 +110,7 @@ Estimates assume a solo developer, part-time; treat them as relative sizes.
 - Implement `ingest/`: session discovery, folder-name parsing, `shotsInfo.json` +
   FITS header normalization. Unit tests against the fixture tree.
 - Minimal viewer: open a FITS, autostretch, pan/zoom (proves the Qt canvas approach).
-- **Milestone M0:** `d3proc info <session_dir>` prints a correct session report;
+- **Milestone M0:** `umbra info <session_dir>` prints a correct session report;
   viewer displays any Dwarf 3 FITS with autostretch.
 
 ### Phase 1 — Library & Grading (2–3 weeks)
@@ -128,7 +131,7 @@ Estimates assume a solo developer, part-time; treat them as relative sizes.
   of operations (calibrate on CFA → demosaic → register → integrate), Bayer drizzle
   deferred to Phase 6.
 - Auto-crop of rotation borders.
-- Wire it into a **one-command pipeline**: `d3proc stack <session>` → stacked FITS.
+- Wire it into a **one-command pipeline**: `umbra stack <session>` → stacked FITS.
 - **Milestone M2 (the payoff moment):** your re-stack of a real session is visibly
   cleaner than the Dwarf 3's onboard stack of the same data (compare side by side —
   this is the app's reason to exist; if we can't beat onboard stacking, stop and

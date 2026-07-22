@@ -1,4 +1,10 @@
-# Dwarf 3 Post-Processing Application — Feature Catalog
+# Umbra Noctis — Feature Catalog
+
+> **Status (v0.1):** the P0 spine and most P1 features are implemented and
+> tested — ingest, library, grading, calibration, registration, stacking,
+> 25 processing ops, dual-band extraction, recipes/auto pipeline, plate-solve
+> adapters, planetary stacking, exports, CLI, and GUI. Everything else below
+> remains the roadmap; see IMPLEMENTATION_PLAN.md Phase 6.
 
 This document is the exhaustive feature list for an application that post-processes
 single images and image sets captured with the DwarfLab Dwarf 3 smart telescope.
