@@ -1,0 +1,39 @@
+[project]
+name = "umbra-noctis"
+version = "0.1.0"
+description = "Umbra Noctis — post-processing suite for the DwarfLab Dwarf 3 smart telescope. Out of shadow, into the sun."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Ben Manley" }]
+keywords = ["astronomy", "astrophotography", "dwarf3", "image-processing", "stacking"]
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "astropy>=6.0",
+    "astroalign>=2.5",
+    "opencv-python-headless>=4.9",
+    "pillow>=10.0",
+    "tifffile>=2024.1.30",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.6"]
+dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[project.scripts]
+umbra = "umbra_noctis.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["umbra_noctis"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
