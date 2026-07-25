@@ -49,8 +49,16 @@ Requires Python 3.11+.
 ```bash
 git clone https://github.com/ManliestBen/umbra-noctis.git
 cd umbra-noctis
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[gui]"
+```
+
+### Development
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev,gui]"     # dev = pytest + ruff; gui = desktop app
+make check                      # lint + full test suite
 ```
 
 ## Five-minute start (no telescope data needed)
