@@ -211,12 +211,15 @@ class GradePage(QWidget):
     def run_grading(self):
         if not self.state.session:
             return
+        if getattr(self, "worker", None) is not None and self.worker.isRunning():
+            return
         self.grade_btn.setEnabled(False)
         self.grade_btn.setText("Grading…")
         self.worker = FnWorker(grade_session, self.state.session.lights,
                                wants_log=False)
         self.worker.succeeded.connect(self._graded)
-        self.worker.failed.connect(lambda tb: self.summary.setText("Grading failed — see log"))
+        self.worker.failed.connect(self._grading_failed)
+        self.worker.finished.connect(self.worker.deleteLater)
         self.worker.start()
 
     def _graded(self, results):
@@ -227,6 +230,11 @@ class GradePage(QWidget):
         self.next_btn.setEnabled(True)
         if self.table.rowCount():
             self.table.setCurrentCell(0, 0)
+
+    def _grading_failed(self, tb):
+        self.grade_btn.setEnabled(True)
+        self.grade_btn.setText("Grade all frames")
+        self.summary.setText("Grading failed — see log")
 
     def _fill_table(self):
         self.table.setRowCount(0)
