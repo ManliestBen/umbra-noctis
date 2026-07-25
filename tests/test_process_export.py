@@ -159,6 +159,5 @@ def test_auto_process_end_to_end(tmp_path):
     ops = [h["op"] for h in img.history]
     assert "integrate" in ops and "ghs" in ops
     # the darks folder next to the lights must have been found automatically
-    assert any("Master dark" in line for line in
-               []) or True  # log lines checked implicitly via calibration history
-    assert any(h["op"] == "subtract_dark" for h in img.history) or True
+    assert any(h["op"] == "subtract_dark" for h in img.history), \
+        "auto pipeline should have found and subtracted the darks next door"

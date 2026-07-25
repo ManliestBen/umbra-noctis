@@ -69,7 +69,7 @@ def test_library_import_and_dedup(tmp_path):
 
     # Re-import of the same folder: same row, not duplicated
     sid2, new2 = lib.import_session(s)
-    assert not new2 or sid2 == sid
+    assert (new2, sid2) == (False, sid)
     assert len(lib.sessions()) == 1
 
     lib.import_session(parse_session(dark_dir))

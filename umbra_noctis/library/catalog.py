@@ -110,11 +110,9 @@ class Library:
              session.gain, session.timestamp, session.filter_hint, session.ra,
              session.dec, session.frame_count, session.integration_s),
         )
-        sid = cur.lastrowid
-        if not sid:
-            sid = self.conn.execute(
-                "SELECT id FROM sessions WHERE path = ?", (str(session.path),)
-            ).fetchone()["id"]
+        sid = self.conn.execute(
+            "SELECT id FROM sessions WHERE path = ?", (str(session.path),)
+        ).fetchone()["id"]
         for i, light in enumerate(session.lights):
             self.conn.execute(
                 """INSERT INTO frames (session_id, path, idx) VALUES (?,?,?)
