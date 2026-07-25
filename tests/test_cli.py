@@ -68,6 +68,47 @@ def test_outputs_recorded_after_auto(tmp_path, capsys):
     assert rows[0]["path"]
 
 
+def test_library_rate_and_note(tmp_path, capsys):
+    d = tmp_path / "demo"
+    main(["demo-data", str(d), "--frames", "4"])
+    db = tmp_path / "lib.db"
+    capsys.readouterr()
+
+    main(["import", str(d), "--db", str(db)])
+    out = capsys.readouterr().out
+    sid = int(out.splitlines()[0].split("#")[1].split()[0])
+    capsys.readouterr()
+
+    main(["library", "rate", str(sid), "4", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "****" in out
+
+    main(["library", "sessions", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "****" in out
+
+    main(["library", "note", str(sid), "first", "light", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "first light" in out
+
+
+def test_library_rate_rejects_out_of_range(tmp_path, capsys):
+    d = tmp_path / "demo"
+    main(["demo-data", str(d), "--frames", "4"])
+    db = tmp_path / "lib.db"
+    capsys.readouterr()
+    main(["import", str(d), "--db", str(db)])
+    out = capsys.readouterr().out
+    sid = int(out.splitlines()[0].split("#")[1].split()[0])
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["library", "rate", str(sid), "9", "--db", str(db)])
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "0-5" in err
+
+
 def test_grade_prints_verdict_table(tmp_path, capsys):
     d = tmp_path / "demo"
     main(["demo-data", str(d), "--frames", "6"])

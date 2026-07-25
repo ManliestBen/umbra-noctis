@@ -31,12 +31,17 @@ Walk a tree, import every session found into the library (duplicates
 detected by content fingerprint). `--db` overrides the default
 `~/.umbra-noctis/library.db` (or set `UMBRA_HOME`).
 
-## `umbra library [sessions|targets|outputs] [--target NAME] [--db PATH]`
+## `umbra library [sessions|targets|outputs|rate|note] [--target NAME] [--db PATH]`
 
 - `sessions` — every imported session (id, night, target, frames, minutes, rating).
 - `targets` — per-target rollup: sessions, frames, total integration. Your
   acquisition dashboard.
-- `outputs` — every registered export, newest first.
+- `outputs` — every registered export, newest first (populated automatically
+  by `umbra auto` and the GUI's Export page).
+- `rate <session-id> <0-5>` — set a session's star rating, e.g.
+  `umbra library rate 12 4`. Rejects anything outside 0-5.
+- `note <session-id> <text>` — attach a free-text note to a session, e.g.
+  `umbra library note 12 "thin cirrus after midnight"`.
 
 `--target` filters by any alias ("andromeda" finds M31 sessions).
 

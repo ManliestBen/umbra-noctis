@@ -68,6 +68,15 @@ def cmd_import(args):
     print(f"\n{added} new / {len(sessions)} total sessions -> {lib.db_path}")
 
 
+def _print_session_row(r):
+    mins = int((r["integration_s"] or 0) // 60)
+    stars = "*" * (r["rating"] or 0)
+    print(f"  #{r['id']:<4} {r['timestamp'] or '?':<22} {r['target_display'] or '?':<26}"
+          f"{r['frame_count'] or 0:>4} fr {mins:>5}min  {stars}")
+    if r["notes"]:
+        print(f"        note: {r['notes']}")
+
+
 def cmd_library(args):
     from .library import Library
     lib = Library(db_path=args.db)
@@ -84,12 +93,35 @@ def cmd_library(args):
     elif args.what == "outputs":
         for r in lib.outputs():
             print(f"  {r['created_at']}  {r['target']:<10} {r['name']:<24} {r['path']}")
+    elif args.what in ("rate", "note"):
+        if len(args.args) < 2:
+            print(f"usage: umbra library {args.what} <session-id> "
+                  + ("<0-5>" if args.what == "rate" else "<text>"), file=sys.stderr)
+            sys.exit(1)
+        try:
+            session_id = int(args.args[0])
+        except ValueError:
+            print(f"error: session-id must be an integer, got {args.args[0]!r}", file=sys.stderr)
+            sys.exit(1)
+        if lib.session(session_id) is None:
+            print(f"error: no session #{session_id} in the library", file=sys.stderr)
+            sys.exit(1)
+        if args.what == "rate":
+            try:
+                rating = int(args.args[1])
+            except ValueError:
+                print(f"error: rating must be an integer, got {args.args[1]!r}", file=sys.stderr)
+                sys.exit(1)
+            if not 0 <= rating <= 5:
+                print(f"error: rating must be 0-5, got {rating}", file=sys.stderr)
+                sys.exit(1)
+            lib.set_rating(session_id, rating)
+        else:
+            lib.set_notes(session_id, " ".join(args.args[1:]))
+        _print_session_row(lib.session(session_id))
     else:  # sessions
         for r in lib.sessions(target=args.target):
-            mins = int((r["integration_s"] or 0) // 60)
-            stars = "*" * (r["rating"] or 0)
-            print(f"  #{r['id']:<4} {r['timestamp'] or '?':<22} {r['target_display'] or '?':<26}"
-                  f"{r['frame_count'] or 0:>4} fr {mins:>5}min  {stars}")
+            _print_session_row(r)
 
 
 def cmd_grade(args):
@@ -409,7 +441,9 @@ def main(argv=None):
 
     p = sub.add_parser("library", help="browse the library")
     p.add_argument("what", nargs="?", default="sessions",
-                   choices=("sessions", "targets", "outputs"))
+                   choices=("sessions", "targets", "outputs", "rate", "note"))
+    p.add_argument("args", nargs="*",
+                   help="rate <session-id> <0-5>   |   note <session-id> <text>")
     p.add_argument("--target")
     p.add_argument("--db", default=None)
     p.set_defaults(func=cmd_library)
