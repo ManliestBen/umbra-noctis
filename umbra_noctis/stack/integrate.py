@@ -30,7 +30,7 @@ from ..calib.masters import (
 )
 from ..core.image import AstroImage
 from ..grade.metrics import FrameQuality, grade_frame, score_qualities
-from .register import Transform, pick_reference, register_frames, warp
+from .register import Transform, pick_reference, solve_transform, warp
 
 _CV_BAYER = {
     # OpenCV pattern names refer to the 2×2 tile at (0,0) read as BGR order.
@@ -130,9 +130,10 @@ def integrate(
             f"qualities has {len(qualities)} entries but light_paths has "
             f"{len(light_paths)} — they must be the same length and order")
 
-    frames: list[AstroImage] = []
-    qualities = list(qualities) if qualities_supplied else []
-    for i, path in enumerate(light_paths):
+    def _load_calibrated(path: str | Path) -> AstroImage:
+        """Load one frame and apply dark/flat/cosmetic/demosaic calibration —
+        the one calibration path shared by pass 1 (metrics only) and pass 2
+        (integration), so a frame is never calibrated two different ways."""
         img = AstroImage.from_file(path)
         if master_dark is not None:
             img = subtract_dark(img, master_dark)
@@ -142,16 +143,24 @@ def integrate(
             img = cosmetic_correction(img, hot_map)
         if img.cfa:
             img = demosaic(img, demosaic_method)
-        frames.append(img)
+        return img
+
+    # --------------------------------------------------------- pass 1: grade
+    # Only the FrameQuality survives each iteration — pixels are discarded
+    # immediately, so this never holds more than one decoded frame at a time
+    # regardless of session size.
+    qualities = list(qualities) if qualities_supplied else []
+    for i, path in enumerate(light_paths):
         if not qualities_supplied:
+            img = _load_calibrated(path)
             qualities.append(grade_frame(img, path))
         _prog("calibrate", i + 1, len(light_paths))
     if not qualities_supplied:
         score_qualities(qualities)
 
     # ------------------------------------------------------- quality filter
-    kept_idx = list(range(len(frames)))
-    if quality_filter and len(frames) >= 5:
+    kept_idx = list(range(len(light_paths)))
+    if quality_filter and len(light_paths) >= 5:
         # Re-run the session-relative rejection on already-computed metrics.
         n_stars = np.array([q.n_stars for q in qualities], dtype=float)
         star_med = max(np.nanmedian(n_stars), 1.0)
@@ -182,30 +191,26 @@ def integrate(
         n_keep = max(3, int(round(len(ranked) * best_fraction)))
         kept_idx = sorted(ranked[:n_keep])
     if len(kept_idx) < 1:
-        kept_idx = list(range(len(frames)))
+        kept_idx = list(range(len(light_paths)))
         _log("Quality filter removed everything — keeping all frames instead")
-    _log(f"Using {len(kept_idx)}/{len(frames)} frames")
+    _log(f"Using {len(kept_idx)}/{len(light_paths)} frames")
 
-    used = [frames[i] for i in kept_idx]
+    kept_paths = [light_paths[i] for i in kept_idx]
     used_q = [qualities[i] for i in kept_idx]
+    n = len(kept_paths)
 
     # ---------------------------------------------------------- registration
     ref_local = pick_reference(used_q)
-    transforms = register_frames(used, ref_local,
-                                 progress=lambda d, t: _prog("register", d, t))
-    solved = [t for t in transforms if t.method != "identity"]
-    if solved:
-        rot_span = max(abs(t.rotation_deg) for t in solved)
-        _log(f"Registration: {sum(1 for t in solved if t.method == 'stars')} star-solved, "
-             f"{sum(1 for t in solved if t.method == 'phase')} phase-only; "
-             f"max field rotation {rot_span:.2f} deg")
 
-    # ------------------------------------------------------------ integrate
-    ref_img = used[ref_local]
+    # Reload the reference frame once, here at the start of pass 2: pass 1
+    # discarded every frame's pixels, keeping only its FrameQuality, so the
+    # reference's data is needed again both as the registration target below
+    # and for the luminance normalization stats every other kept frame is
+    # matched against.
+    ref_img = _load_calibrated(kept_paths[ref_local])
     out_h = int(ref_img.height * drizzle)
     out_w = int(ref_img.width * drizzle)
     is_color = ref_img.is_color
-    n = len(used)
 
     ref_lum = ref_img.luminance()
     ref_median = float(np.nanmedian(ref_lum))
@@ -216,18 +221,40 @@ def integrate(
         scores = np.array([max(q.score, 1.0) for q in used_q], dtype=np.float32)
         weights = scores / scores.max()
 
-    # Warp each frame once, store to a disk-backed memmap, then reduce strips.
+    # --------------------------------------------------- pass 2: warp + write
+    # One kept path at a time: reload, calibrate (same _load_calibrated as
+    # pass 1), solve its transform against the already-loaded reference,
+    # warp straight into the disk-backed memmap, then drop it. At no point
+    # does this loop hold more than the reference frame plus the one frame
+    # currently being processed.
     tmpdir = tempfile.TemporaryDirectory(prefix="umbra_stack_")
     shape = (n, out_h, out_w, 3) if is_color else (n, out_h, out_w)
     cube = np.memmap(Path(tmpdir.name) / "cube.dat", dtype=np.float32,
                      mode="w+", shape=shape)
-    for i, (img, t) in enumerate(zip(used, transforms, strict=False)):
+    transforms: list[Transform] = []
+    for i, path in enumerate(kept_paths):
+        if i == ref_local:
+            img, t = ref_img, Transform.identity()
+        else:
+            img = _load_calibrated(path)
+            t = solve_transform(img, ref_img)
+        transforms.append(t)
+        _prog("register", i + 1, n)
+
         data = img.data
         if normalize and i != ref_local:
             data = _normalize_to_ref(data, ref_median, ref_scale)
         cube[i] = warp(data, t, order=1, output_shape=(out_h, out_w),
                        upscale=drizzle)
         _prog("integrate", i + 1, n + 1)
+        del img, data
+
+    solved = [t for t in transforms if t.method != "identity"]
+    if solved:
+        rot_span = max(abs(t.rotation_deg) for t in solved)
+        _log(f"Registration: {sum(1 for t in solved if t.method == 'stars')} star-solved, "
+             f"{sum(1 for t in solved if t.method == 'phase')} phase-only; "
+             f"max field rotation {rot_span:.2f} deg")
 
     result = np.zeros(shape[1:], dtype=np.float32)
     rejected_px = 0
@@ -260,11 +287,11 @@ def integrate(
     tmpdir.cleanup()
 
     stacked = ref_img.with_data(np.clip(np.nan_to_num(result, nan=0.0), 0.0, 1.0))
-    stacked.meta["n_stacked"] = len(used)
+    stacked.meta["n_stacked"] = n
     stacked.meta["total_integration_s"] = (
-        float(ref_img.meta.get("exposure_s", 0) or 0) * len(used))
+        float(ref_img.meta.get("exposure_s", 0) or 0) * n)
     stacked.record("integrate", {
-        "n_frames": len(used), "rejection_sigma": rejection_sigma,
+        "n_frames": n, "rejection_sigma": rejection_sigma,
         "weighting": weighting, "normalize": normalize, "drizzle": drizzle,
     })
 
@@ -275,8 +302,8 @@ def integrate(
 
     return StackResult(
         image=stacked,
-        n_used=len(used),
-        n_rejected_frames=len(frames) - len(used),
+        n_used=n,
+        n_rejected_frames=len(light_paths) - n,
         qualities=qualities,
         transforms=transforms,
         reference_index=kept_idx[ref_local],
