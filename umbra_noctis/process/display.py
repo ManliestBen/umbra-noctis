@@ -9,14 +9,17 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..core.stats import robust_sigma
+from ..core.stats import luminance, robust_sigma
 
 
 def compute_stf(data: np.ndarray, target_background: float = 0.25,
                 shadow_clip: float = -2.8) -> tuple[float, float, float]:
     """Return (shadows, midtones, highlights) for a midtone-transfer stretch,
     computed from the image statistics (median + MAD)."""
-    lum = data if data.ndim == 2 else data.mean(axis=2)
+    # Rec.709 luma (matches AstroImage.luminance() elsewhere in the codebase)
+    # rather than a flat RGB mean — deliberate, user-visible change for
+    # color display autostretches (see plan 006 step 6).
+    lum = luminance(data)
     med = float(np.median(lum))
     mad = robust_sigma(lum, eps=1e-9)
     shadows = max(0.0, med + shadow_clip * mad)

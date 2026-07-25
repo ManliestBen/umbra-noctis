@@ -12,6 +12,7 @@ import warnings
 import numpy as np
 from scipy import ndimage
 
+from ..core.stats import luminance as _luminance
 from ..core.stats import robust_sigma
 
 try:
@@ -24,13 +25,6 @@ _DTYPE = np.dtype([("x", "f8"), ("y", "f8"), ("flux", "f8"),
                    ("fwhm", "f8"), ("ellipticity", "f8")])
 
 _warned_no_sep = False
-
-
-def _luminance(data: np.ndarray) -> np.ndarray:
-    if data.ndim == 3:
-        return (0.2126 * data[..., 0] + 0.7152 * data[..., 1]
-                + 0.0722 * data[..., 2]).astype(np.float32)
-    return np.ascontiguousarray(data, dtype=np.float32)
 
 
 def detect_stars(data: np.ndarray, threshold_sigma: float = 5.0,

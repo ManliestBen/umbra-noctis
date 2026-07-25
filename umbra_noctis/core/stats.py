@@ -50,3 +50,27 @@ def robust_z(values, eps: float = 1e-12) -> np.ndarray:
     if not np.isfinite(sigma) or sigma < eps:
         return np.zeros_like(values)
     return (values - med) / sigma
+
+
+def luminance(data: np.ndarray) -> np.ndarray:
+    """Rec.709 luma for an HxWx3 array; 2-D input passes through (cast to
+    contiguous float32)."""
+    data = np.asarray(data)
+    if data.ndim == 3:
+        return (0.2126 * data[..., 0] + 0.7152 * data[..., 1]
+                + 0.0722 * data[..., 2]).astype(np.float32)
+    return np.ascontiguousarray(data, dtype=np.float32)
+
+
+def superpixel_bin(lum: np.ndarray) -> np.ndarray:
+    """2x2-average bin a CFA-shaped luminance plane down to per-pixel scale.
+
+    Used to approximate a demosaiced luminance from raw Bayer data without
+    actually demosaicing. If either dimension is odd, the trailing row/
+    column is dropped.
+    """
+    lum = np.asarray(lum)
+    h, w = lum.shape[:2]
+    h2, w2 = h - (h % 2), w - (w % 2)
+    trimmed = lum[:h2, :w2]
+    return trimmed.reshape(h2 // 2, 2, w2 // 2, 2).mean(axis=(1, 3))
