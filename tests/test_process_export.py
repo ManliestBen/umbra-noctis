@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -166,6 +167,26 @@ def test_export_formats(tmp_path):
         assert p.exists() and p.stat().st_size > 1000
     cmp_path = save_comparison(_color_img(), img, tmp_path / "cmp.jpg")
     assert cmp_path.exists()
+
+
+def test_export_writes_sidecar(tmp_path):
+    img = apply_op(_color_img(), "autostretch")
+    export_image(img, tmp_path / "out.jpg")
+    sidecar_path = tmp_path / "out.jpg.umbra.json"
+    assert sidecar_path.exists()
+    sidecar = json.loads(sidecar_path.read_text())
+    assert sidecar["output"] == "out.jpg"
+    ops = [h["op"] for h in sidecar["history"]]
+    assert "autostretch" in ops
+
+    # FITS already carries this in its own header — no sidecar written
+    fits_path = export_image(img, tmp_path / "out.fits")
+    assert not Path(str(fits_path) + ".umbra.json").exists()
+
+    # opt-out
+    p2 = export_image(img, tmp_path / "out2.jpg", sidecar=False)
+    assert not (tmp_path / "out2.jpg.umbra.json").exists()
+    assert p2.exists()
 
 
 def test_acquisition_caption_handles_missing_exposure_and_gain(tmp_path):

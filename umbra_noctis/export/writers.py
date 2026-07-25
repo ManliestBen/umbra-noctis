@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -19,8 +21,25 @@ def _to_uint(data: np.ndarray, bits: int) -> np.ndarray:
     return (clipped * 255.0 + 0.5).astype(np.uint8)
 
 
+def _write_sidecar(img: AstroImage, path: Path) -> None:
+    """Write a ``<output>.umbra.json`` provenance sidecar next to a
+    display-format export (JPEG/TIFF/PNG lose the FITS-only history/meta
+    otherwise, so "every step recorded" was only true for FITS)."""
+    sidecar = {
+        "sidecar_version": 1,
+        "output": path.name,
+        "created": datetime.now(UTC).isoformat(timespec="seconds"),
+        "software": "Umbra Noctis",
+        "source": str(img.source_path) if img.source_path else None,
+        "meta": {k: v for k, v in img.meta.items() if isinstance(v, (str, int, float, bool))},
+        "history": img.history,
+    }
+    Path(str(path) + ".umbra.json").write_text(json.dumps(sidecar, indent=2, default=str))
+
+
 def export_image(img: AstroImage, path: str | Path, quality: int = 92,
-                 autostretch_if_linear: bool = True, resize_long_edge: int = 0) -> Path:
+                 autostretch_if_linear: bool = True, resize_long_edge: int = 0,
+                 sidecar: bool = True) -> Path:
     """Export to the format implied by the extension.
 
     - ``.tif/.tiff``  16-bit TIFF (best for further editing elsewhere)
@@ -30,6 +49,10 @@ def export_image(img: AstroImage, path: str | Path, quality: int = 92,
 
     Linear data exported to a display format is autostretched first (disable
     with ``autostretch_if_linear=False`` if you really want a black JPEG).
+
+    A ``<output>.umbra.json`` provenance sidecar (history + metadata) is
+    written next to every non-FITS export unless ``sidecar=False`` — FITS
+    already carries this in its header, so it's skipped there.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,6 +89,8 @@ def export_image(img: AstroImage, path: str | Path, quality: int = 92,
         Image.fromarray(arr, mode).save(path, quality=quality, optimize=True)
     else:
         raise ValueError(f"Unknown export format: {suffix}")
+    if sidecar:
+        _write_sidecar(img, path)
     return path
 
 
