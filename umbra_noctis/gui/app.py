@@ -190,6 +190,15 @@ class MainWindow(QMainWindow):
             "<i>Ex umbra noctis, in solem</i> — out of the shadow of night, "
             "into the sun.")
 
+    # ---------------------------------------------------------------- close
+    def closeEvent(self, event):
+        for page in (self.grade_page, self.stack_page, self.process_page):
+            worker = getattr(page, "worker", None)
+            if worker is not None and worker.isRunning():
+                worker.quit()
+                worker.wait(5000)
+        event.accept()
+
 
 def run_gui():
     app = QApplication(sys.argv)
