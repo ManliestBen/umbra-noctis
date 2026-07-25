@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..core.stats import robust_sigma
+
 
 def compute_stf(data: np.ndarray, target_background: float = 0.25,
                 shadow_clip: float = -2.8) -> tuple[float, float, float]:
@@ -16,7 +18,7 @@ def compute_stf(data: np.ndarray, target_background: float = 0.25,
     computed from the image statistics (median + MAD)."""
     lum = data if data.ndim == 2 else data.mean(axis=2)
     med = float(np.median(lum))
-    mad = float(np.median(np.abs(lum - med))) * 1.4826 + 1e-9
+    mad = robust_sigma(lum, eps=1e-9)
     shadows = max(0.0, med + shadow_clip * mad)
     highlights = 1.0
     x = med - shadows

@@ -12,6 +12,8 @@ import warnings
 import numpy as np
 from scipy import ndimage
 
+from ..core.stats import robust_sigma
+
 try:
     import sep as _sep
     _HAVE_SEP = True
@@ -67,7 +69,7 @@ def _detect_sep(lum: np.ndarray, threshold_sigma: float, max_stars: int) -> np.n
 
 def _detect_scipy(lum: np.ndarray, threshold_sigma: float, max_stars: int) -> np.ndarray:
     med = float(np.median(lum))
-    mad = float(np.median(np.abs(lum - med))) * 1.4826 + 1e-9
+    mad = robust_sigma(lum, eps=1e-9)
     mask = lum > med + threshold_sigma * mad
     labels, n = ndimage.label(mask)
     if n == 0:

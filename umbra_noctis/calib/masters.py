@@ -18,6 +18,7 @@ import numpy as np
 from scipy import ndimage
 
 from ..core.image import AstroImage
+from ..core.stats import robust_sigma
 
 _MASTER_STRIP_ROWS = 64
 
@@ -141,7 +142,7 @@ def hot_pixel_map(master_dark: AstroImage, k: float = 8.0) -> np.ndarray:
     """Boolean map of hot pixels: dark value > median + k·MAD."""
     d = master_dark.data if master_dark.data.ndim == 2 else master_dark.luminance()
     med = float(np.median(d))
-    mad = float(np.median(np.abs(d - med))) * 1.4826 + 1e-9
+    mad = robust_sigma(d, eps=1e-9)
     return d > med + k * mad
 
 
@@ -157,7 +158,7 @@ def hot_pixels_from_lights(paths: list[str | Path], k: float = 10.0,
             d = d.mean(axis=2)
         minimum = d if minimum is None else np.minimum(minimum, d)
     med = float(np.median(minimum))
-    mad = float(np.median(np.abs(minimum - med))) * 1.4826 + 1e-9
+    mad = robust_sigma(minimum, eps=1e-9)
     return minimum > med + k * mad
 
 

@@ -28,6 +28,7 @@ import cv2
 import numpy as np
 
 from ..core.image import AstroImage
+from ..core.stats import robust_sigma
 
 
 @dataclass
@@ -79,7 +80,7 @@ def _luminance_small(path: Path, max_width: int = 1024) -> tuple[np.ndarray, flo
 def _find_streaks(residual: np.ndarray, scale: float, k_sigma: float,
                   min_length: float) -> list[Streak]:
     med = float(np.median(residual))
-    mad = float(np.median(np.abs(residual - med))) * 1.4826 + 1e-6
+    mad = robust_sigma(residual, eps=1e-6)
     mask = ((residual - med) > k_sigma * mad).astype(np.uint8) * 255
     # connect the dashes a defocused or faint streak breaks into
     mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))

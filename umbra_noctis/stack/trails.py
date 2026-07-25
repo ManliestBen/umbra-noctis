@@ -21,6 +21,7 @@ import numpy as np
 
 from ..calib.masters import cosmetic_correction, subtract_dark
 from ..core.image import FRAME_SUFFIXES, AstroImage
+from ..core.stats import robust_sigma
 from .integrate import demosaic
 from .register import solve_transform, warp
 
@@ -172,7 +173,7 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
     n_hot = 0
     if cosmetic and master_dark is None and not align and n_used >= 3:
         med = float(np.median(min_lum))
-        mad = float(np.median(np.abs(min_lum - med))) * 1.4826 + 1e-9
+        mad = robust_sigma(min_lum, eps=1e-9)
         hot = min_lum > med + 10.0 * mad
         n_hot = int(hot.sum())
         if 0 < n_hot < 0.01 * hot.size:

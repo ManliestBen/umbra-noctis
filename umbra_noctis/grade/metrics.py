@@ -21,6 +21,8 @@ from pathlib import Path
 import numpy as np
 
 from ..core.image import AstroImage
+from ..core.stats import robust_sigma
+from ..core.stats import robust_z as _robust_z
 from .stars import detect_stars
 
 
@@ -47,7 +49,7 @@ def grade_frame(img: AstroImage, path: str | Path = "") -> FrameQuality:
     lum = img.luminance()
     stars = detect_stars(lum)
     med = float(np.median(lum))
-    mad = float(np.median(np.abs(lum - med))) * 1.4826
+    mad = robust_sigma(lum)  # default eps=1e-9 — deliberate: this site had none before
     if len(stars) >= 3:
         fwhm = float(np.median(stars["fwhm"]))
         ecc = float(np.median(stars["ellipticity"]))
@@ -61,14 +63,6 @@ def grade_frame(img: AstroImage, path: str | Path = "") -> FrameQuality:
         background=med,
         noise=mad,
     )
-
-
-def _robust_z(values: np.ndarray) -> np.ndarray:
-    med = np.nanmedian(values)
-    mad = np.nanmedian(np.abs(values - med)) * 1.4826
-    if not np.isfinite(mad) or mad < 1e-12:
-        return np.zeros_like(values)
-    return (values - med) / mad
 
 
 def grade_session(frames: list[str | Path], k: float = 3.5,
