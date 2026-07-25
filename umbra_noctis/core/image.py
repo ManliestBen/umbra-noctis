@@ -20,6 +20,8 @@ from typing import Any
 import numpy as np
 from astropy.io import fits
 
+from .stats import luminance as _shared_luminance
+
 # FITS keywords we normalize into AstroImage.meta, with fallback aliases.
 _META_KEYS = {
     "exposure_s": ("EXPTIME", "EXPOSURE", "EXP"),
@@ -81,10 +83,7 @@ class AstroImage:
 
     def luminance(self) -> np.ndarray:
         """Rec.709 luminance for color images; the data itself for mono."""
-        if self.is_color:
-            d = self.data
-            return 0.2126 * d[..., 0] + 0.7152 * d[..., 1] + 0.0722 * d[..., 2]
-        return self.data
+        return _shared_luminance(self.data)
 
     # ------------------------------------------------------------------- I/O
     @classmethod
@@ -135,7 +134,7 @@ class AstroImage:
             meta=meta,
             fits_header=header,
             cfa=cfa,
-            linear=True,
+            linear=bool(header.get("UMBLIN", True)),
             source_path=path,
         )
 
@@ -243,6 +242,7 @@ class AstroImage:
                     continue
         if self.cfa:
             header["BAYERPAT"] = self.cfa
+        header["UMBLIN"] = (bool(self.linear), "Umbra Noctis: data is linear, not stretched")
         header["SWCREATE"] = "Umbra Noctis"
         for entry in self.history:
             header.add_history(json.dumps(entry, default=str)[:70])

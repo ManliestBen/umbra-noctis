@@ -149,17 +149,23 @@ def cmd_stack(args):
 
 def cmd_auto(args):
     from .recipes import auto_process
+    logs = []
+
+    def _log(msg):
+        logs.append(msg)
+        print("  " + msg)
+
     img, result, exported = auto_process(
         args.session, args.output, darks_dir=args.darks,
-        progress=_progress_printer, log=lambda m: print("  " + m))
+        progress=_progress_printer, log=_log)
     print("\nDone. Exported:")
     for p in exported:
         print(f"  {p}")
+    if any("SKIPPED" in m for m in logs):
+        print("\nWARNING: one or more processing steps were skipped — check the log above.")
 
 
 def cmd_process(args):
-    import umbra_noctis.process  # noqa: F401
-
     from .core.image import AstroImage
     from .core.ops import apply_op
     from .export import export_image
@@ -193,9 +199,8 @@ def cmd_process(args):
 
 
 def cmd_ops(args):
-    import umbra_noctis.process  # noqa: F401
-
-    from .core.ops import OPS, ops_markdown
+    from .core.ops import OPS, ensure_ops_loaded, ops_markdown
+    ensure_ops_loaded()
     if args.markdown:
         print(ops_markdown())
         return
@@ -238,8 +243,6 @@ def cmd_solve(args):
 
 
 def cmd_planetary(args):
-    import umbra_noctis.process  # noqa: F401
-
     from .core.ops import apply_op
     from .export import export_image
     from .planetary import lucky_stack

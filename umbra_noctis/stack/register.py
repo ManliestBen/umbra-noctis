@@ -23,6 +23,7 @@ except ImportError:  # pragma: no cover
     _HAVE_AA = False
 
 from ..core.image import AstroImage
+from ..core.stats import superpixel_bin
 
 
 @dataclass
@@ -45,8 +46,7 @@ def _lum(img: AstroImage) -> np.ndarray:
     lum = img.luminance()
     if img.cfa:
         # Superpixel: bin the CFA 2×2 so star patterns aren't mosaic-corrupted.
-        h, w = lum.shape[0] // 2 * 2, lum.shape[1] // 2 * 2
-        lum = lum[:h, :w].reshape(h // 2, 2, w // 2, 2).mean(axis=(1, 3))
+        lum = superpixel_bin(lum)
     return np.ascontiguousarray(lum, dtype=np.float32)
 
 

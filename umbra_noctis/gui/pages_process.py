@@ -29,10 +29,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import umbra_noctis.process  # noqa: F401 — register ops
-
 from ..calib.masters import build_master
-from ..core.ops import OPS, apply_op
+from ..core.ops import OPS, apply_op, ensure_ops_loaded
 from ..export.summary import acquisition_caption
 from ..export.writers import export_image, save_comparison
 from ..recipes.auto import AUTO_RECIPE_STEPS
@@ -128,6 +126,8 @@ class StackPage(QWidget):
     def run_stack(self):
         if not self.state.session:
             return
+        if getattr(self, "worker", None) is not None and self.worker.isRunning():
+            return
         accepted_qualities = [q for q in self.state.qualities if q.accepted] \
             if self.state.qualities else []
         accepted = [q.path for q in accepted_qualities] \
@@ -155,6 +155,7 @@ class StackPage(QWidget):
         self.worker.logged.connect(self.log.appendPlainText)
         self.worker.succeeded.connect(self._done)
         self.worker.failed.connect(self._failed)
+        self.worker.finished.connect(self.worker.deleteLater)
         self.worker.start()
 
     def _progress(self, stage, done, total):
@@ -187,6 +188,7 @@ class ProcessPage(QWidget):
 
     def __init__(self, state: AppState, parent=None):
         super().__init__(parent)
+        ensure_ops_loaded()
         self.state = state
         self.worker = None
         self._param_widgets = {}
@@ -240,11 +242,11 @@ class ProcessPage(QWidget):
         self.apply_btn.clicked.connect(self.apply_current)
         ll.addWidget(self.apply_btn)
 
-        auto_btn = QPushButton("✨ Auto-process (do everything for me)")
-        auto_btn.setToolTip("Runs the standard chain: gradient removal, color "
-                            "balance, denoise, GHS stretch, vibrance.")
-        auto_btn.clicked.connect(self.apply_auto_chain)
-        ll.addWidget(auto_btn)
+        self.auto_btn = QPushButton("✨ Auto-process (do everything for me)")
+        self.auto_btn.setToolTip("Runs the standard chain: gradient removal, color "
+                                  "balance, denoise, GHS stretch, vibrance.")
+        self.auto_btn.clicked.connect(self.apply_auto_chain)
+        ll.addWidget(self.auto_btn)
         split.addWidget(left)
 
         # ---- center: canvas
@@ -378,7 +380,10 @@ class ProcessPage(QWidget):
         self._run_ops([(s["op"], s["params"]) for s in AUTO_RECIPE_STEPS])
 
     def _run_ops(self, steps):
+        if getattr(self, "worker", None) is not None and self.worker.isRunning():
+            return
         self.apply_btn.setEnabled(False)
+        self.auto_btn.setEnabled(False)
         img = self.state.current
 
         def job(progress=None, log=None):
@@ -394,6 +399,7 @@ class ProcessPage(QWidget):
         self.worker = FnWorker(job)
         self.worker.succeeded.connect(self._ops_done)
         self.worker.failed.connect(self._ops_failed)
+        self.worker.finished.connect(self.worker.deleteLater)
         self.worker.start()
 
     def _ops_done(self, img):
@@ -401,9 +407,11 @@ class ProcessPage(QWidget):
         self.canvas.set_image(img.data, keep_view=True)
         self._refresh_history()
         self.apply_btn.setEnabled(True)
+        self.auto_btn.setEnabled(True)
 
     def _ops_failed(self, tb):
         self.apply_btn.setEnabled(True)
+        self.auto_btn.setEnabled(True)
         QMessageBox.warning(self, "Operation failed", tb.splitlines()[-1])
 
     def undo(self):

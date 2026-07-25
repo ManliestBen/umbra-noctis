@@ -13,6 +13,7 @@ from scipy import ndimage
 
 from ..core.image import AstroImage
 from ..core.ops import Param, register_op
+from ..core.stats import MAD_TO_SIGMA, median_mad
 from ..grade.stars import detect_stars
 
 
@@ -51,21 +52,46 @@ def background_extract(img: AstroImage, degree: int = 2, samples: int = 24,
                 terms.append((x ** i) * (y ** j))
         return np.stack(terms, axis=-1)
 
+    # Clamp the sample grid to the image size — with a small image (or a
+    # thumbnail passed through by mistake), a naive `samples`-per-axis grid
+    # produces zero-area boxes whose percentile is NaN, poisoning the whole
+    # fit. Cap per-axis resolution at the pixel count and skip any box that
+    # still comes out empty.
+    samples_y = min(samples, h)
+    samples_x = min(samples, w)
+    boxes = []
+    for iy in range(samples_y):
+        y0, y1 = iy * h // samples_y, (iy + 1) * h // samples_y
+        if y1 <= y0:
+            continue
+        for ix in range(samples_x):
+            x0, x1 = ix * w // samples_x, (ix + 1) * w // samples_x
+            if x1 <= x0:
+                continue
+            boxes.append((y0, y1, x0, x1))
+
+    if len(boxes) < 6:
+        # Too few valid samples to fit even the simplest (degree-1) model —
+        # leave the image alone rather than divide/subtract a NaN model.
+        result = img.copy()
+        result.record("background_extract_skipped", {
+            "reason": "too few valid background samples (<6) — image too "
+                      "small for the sample grid; returned unchanged"})
+        return result
+
     out = np.empty_like(data)
     for c in range(nc):
         ch = data[..., c]
         sy_l, sx_l, val = [], [], []
-        for iy in range(samples):
-            for ix in range(samples):
-                y0, y1 = iy * h // samples, (iy + 1) * h // samples
-                x0, x1 = ix * w // samples, (ix + 1) * w // samples
-                cell = ch[y0:y1, x0:x1]
-                val.append(np.percentile(cell, 25))  # sky, below stars/nebula
-                sy_l.append((y0 + y1) / 2)
-                sx_l.append((x0 + x1) / 2)
+        for y0, y1, x0, x1 in boxes:
+            cell = ch[y0:y1, x0:x1]
+            val.append(np.percentile(cell, 25))  # sky, below stars/nebula
+            sy_l.append((y0 + y1) / 2)
+            sx_l.append((x0 + x1) / 2)
         val = np.array(val)
         # reject samples that sit on nebulosity: sigma-clip against global trend
-        med, mad = np.median(val), np.median(np.abs(val - np.median(val))) * 1.4826 + 1e-9
+        med, mad_raw = median_mad(val)
+        mad = mad_raw * MAD_TO_SIGMA + 1e-9
         ok = np.abs(val - med) < 3.0 * mad
         sxn = (np.array(sx_l)[ok] - w / 2) / w
         syn = (np.array(sy_l)[ok] - h / 2) / h
@@ -218,7 +244,10 @@ def _starlet_denoise(plane: np.ndarray, n_scales: int = 4, k: float = 1.0) -> np
     scales = _starlet_scales(plane, n_scales)
     out = scales[-1].copy()
     for j, layer in enumerate(scales[:-1]):
-        sigma = np.median(np.abs(layer)) * 1.4826 + 1e-12
+        # MAD from zero (not from the layer's own median): wavelet detail
+        # coefficients are already zero-centered, so this is the standard
+        # noise-sigma estimator for starlet/wavelet denoising.
+        sigma = np.median(np.abs(layer)) * MAD_TO_SIGMA + 1e-12
         # threshold falls off with scale: noise lives in the fine scales
         thresh = k * sigma * (3.0, 2.0, 1.0, 0.5)[min(j, 3)]
         out += np.sign(layer) * np.maximum(np.abs(layer) - thresh, 0.0)

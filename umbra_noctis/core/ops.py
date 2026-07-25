@@ -49,6 +49,18 @@ class OpSpec:
 OPS: dict[str, OpSpec] = {}
 
 
+def ensure_ops_loaded() -> None:
+    """Populate OPS by importing the built-in ops package, if not already done.
+
+    Ops self-register via ``@register_op`` as a side effect of importing
+    ``umbra_noctis.process``. Call sites used to rely on an accidental
+    transitive import for this; calling this explicitly makes the
+    dependency real instead of incidental.
+    """
+    if not OPS:
+        import umbra_noctis.process  # noqa: F401
+
+
 def register_op(name: str, label: str, stage: str, params: list[Param] | None = None):
     """Decorator: register a processing operation."""
 
@@ -94,6 +106,7 @@ def coerce_params(spec: OpSpec, params: dict) -> dict:
 
 def apply_op(img: AstroImage, name: str, **params) -> AstroImage:
     """Apply a registered operation and record it in the image history."""
+    ensure_ops_loaded()
     if name not in OPS:
         raise KeyError(f"Unknown operation {name!r}. Known: {sorted(OPS)}")
     spec = OPS[name]
@@ -105,6 +118,7 @@ def apply_op(img: AstroImage, name: str, **params) -> AstroImage:
 
 def ops_markdown() -> str:
     """Render the full operation reference as Markdown (used by docs/CLI)."""
+    ensure_ops_loaded()
     lines = ["# Operation Reference", ""]
     by_stage: dict[str, list[OpSpec]] = {}
     for spec in OPS.values():

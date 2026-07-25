@@ -28,6 +28,7 @@ import cv2
 import numpy as np
 
 from ..core.image import AstroImage
+from ..core.stats import robust_sigma, superpixel_bin
 
 
 @dataclass
@@ -65,8 +66,7 @@ def _luminance_small(path: Path, max_width: int = 1024) -> tuple[np.ndarray, flo
     img = AstroImage.from_file(path)
     lum = img.luminance()
     if img.cfa:  # 2×2 superpixel binning removes the CFA checkerboard
-        h, w = lum.shape[0] // 2 * 2, lum.shape[1] // 2 * 2
-        lum = lum[:h, :w].reshape(h // 2, 2, w // 2, 2).mean(axis=(1, 3))
+        lum = superpixel_bin(lum)
     scale = 0.5 if img.cfa else 1.0
     if lum.shape[1] > max_width:
         f = max_width / lum.shape[1]
@@ -79,7 +79,7 @@ def _luminance_small(path: Path, max_width: int = 1024) -> tuple[np.ndarray, flo
 def _find_streaks(residual: np.ndarray, scale: float, k_sigma: float,
                   min_length: float) -> list[Streak]:
     med = float(np.median(residual))
-    mad = float(np.median(np.abs(residual - med))) * 1.4826 + 1e-6
+    mad = robust_sigma(residual, eps=1e-6)
     mask = ((residual - med) > k_sigma * mad).astype(np.uint8) * 255
     # connect the dashes a defocused or faint streak breaks into
     mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))

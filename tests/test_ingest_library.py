@@ -50,6 +50,23 @@ def test_fits_roundtrip(tmp_path):
     assert np.allclose(back.data, img.data, atol=2.0 / 65535)
 
 
+def test_linear_flag_roundtrip(tmp_path):
+    # A stretched (non-linear) image saved to FITS and reloaded must come
+    # back non-linear — previously the flag never left the object, so a
+    # reloaded stretched image looked linear and got double-autostretched.
+    stretched = AstroImage(data=np.full((8, 8), 0.5, dtype=np.float32), linear=False)
+    out = tmp_path / "stretched.fits"
+    stretched.save_fits(out)
+    back = AstroImage.from_fits(out)
+    assert back.linear is False
+
+    linear_img = AstroImage(data=np.full((8, 8), 0.1, dtype=np.float32), linear=True)
+    out2 = tmp_path / "linear.fits"
+    linear_img.save_fits(out2)
+    back2 = AstroImage.from_fits(out2)
+    assert back2.linear is True
+
+
 def test_resolve_target():
     assert resolve_target("m 31")["canonical"] == "M31"
     assert resolve_target("Andromeda")["canonical"] == "M31"

@@ -7,8 +7,13 @@ Returns a structured array with columns: x, y, flux, fwhm, ellipticity.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 from scipy import ndimage
+
+from ..core.stats import luminance as _luminance
+from ..core.stats import robust_sigma
 
 try:
     import sep as _sep
@@ -19,23 +24,24 @@ except ImportError:  # pragma: no cover
 _DTYPE = np.dtype([("x", "f8"), ("y", "f8"), ("flux", "f8"),
                    ("fwhm", "f8"), ("ellipticity", "f8")])
 
-
-def _luminance(data: np.ndarray) -> np.ndarray:
-    if data.ndim == 3:
-        return (0.2126 * data[..., 0] + 0.7152 * data[..., 1]
-                + 0.0722 * data[..., 2]).astype(np.float32)
-    return np.ascontiguousarray(data, dtype=np.float32)
+_warned_no_sep = False
 
 
 def detect_stars(data: np.ndarray, threshold_sigma: float = 5.0,
                  max_stars: int = 500) -> np.ndarray:
     """Detect point sources; brightest ``max_stars`` returned, flux-sorted."""
+    global _warned_no_sep
     lum = _luminance(data)
     if _HAVE_SEP:
         try:
             return _detect_sep(lum, threshold_sigma, max_stars)
         except Exception:
             pass
+    if not _warned_no_sep:
+        warnings.warn(
+            "sep not installed — falling back to lower-quality scipy star detection",
+            RuntimeWarning, stacklevel=2)
+        _warned_no_sep = True
     return _detect_scipy(lum, threshold_sigma, max_stars)
 
 
@@ -57,7 +63,7 @@ def _detect_sep(lum: np.ndarray, threshold_sigma: float, max_stars: int) -> np.n
 
 def _detect_scipy(lum: np.ndarray, threshold_sigma: float, max_stars: int) -> np.ndarray:
     med = float(np.median(lum))
-    mad = float(np.median(np.abs(lum - med))) * 1.4826 + 1e-9
+    mad = robust_sigma(lum, eps=1e-9)
     mask = lum > med + threshold_sigma * mad
     labels, n = ndimage.label(mask)
     if n == 0:

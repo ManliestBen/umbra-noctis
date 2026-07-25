@@ -230,16 +230,22 @@ def discover_sessions(root: str | Path) -> list[DwarfSession]:
     candidates: set[Path] = set()
     if root.name.upper().startswith("DWARF_") or (root / "shotsInfo.json").exists():
         candidates.add(root)
-    for p in root.rglob("shotsInfo.json"):
-        candidates.add(p.parent)
-    for p in root.rglob("DWARF_*"):
+
+    # Single traversal collecting shotsInfo.json dirs, DWARF_* dirs, and a
+    # per-directory FITS count, instead of three separate rglob walks (the
+    # old *.fits walk re-listed its parent directory once per file — O(n^2)
+    # on a folder with many sub-exposures).
+    fits_counts: dict[Path, int] = {}
+    for p in root.rglob("*"):
         if p.is_dir():
-            candidates.add(p)
+            if p.name.startswith("DWARF_"):
+                candidates.add(p)
+        elif p.name == "shotsInfo.json":
+            candidates.add(p.parent)
+        elif p.name.endswith(".fits"):
+            fits_counts[p.parent] = fits_counts.get(p.parent, 0) + 1
     # Any folder with 3+ FITS files counts, even without metadata.
-    for p in root.rglob("*.fits"):
-        parent = p.parent
-        if parent not in candidates and len(list(parent.glob("*.fits"))) >= 3:
-            candidates.add(parent)
+    candidates.update(parent for parent, count in fits_counts.items() if count >= 3)
 
     sessions = [parse_session(c) for c in sorted(candidates)]
     sessions = [s for s in sessions if s.lights or s.stacked]

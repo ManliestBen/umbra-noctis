@@ -37,6 +37,10 @@ def test_main_window_builds_and_navigates(app, tmp_path):
     win.state.session = parse_session(light_dir)
     win.goto(1)
     assert win.stack_widget.currentIndex() == 1
+
+    # with a session but no stack yet, Process (index 3) bounces to Stack (2)
+    win.goto(3)
+    assert win.stack_widget.currentIndex() == 2
     win.close()
 
 

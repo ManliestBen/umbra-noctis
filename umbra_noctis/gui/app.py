@@ -107,7 +107,7 @@ class MainWindow(QMainWindow):
         if index >= 1 and self.state.session is None:
             self._nudge(0, "Pick a session first (double-click one in the Library).")
             return
-        if index >= 3 and self.state.stacked is None and index != 3:
+        if index >= 3 and self.state.stacked is None:
             self._nudge(2, "Stack the session first.")
             return
         self.stack_widget.setCurrentIndex(index)
@@ -189,6 +189,15 @@ class MainWindow(QMainWindow):
             "Post-processing for the DwarfLab Dwarf 3 smart telescope.<br><br>"
             "<i>Ex umbra noctis, in solem</i> — out of the shadow of night, "
             "into the sun.")
+
+    # ---------------------------------------------------------------- close
+    def closeEvent(self, event):
+        for page in (self.grade_page, self.stack_page, self.process_page):
+            worker = getattr(page, "worker", None)
+            if worker is not None and worker.isRunning():
+                worker.quit()
+                worker.wait(5000)
+        event.accept()
 
 
 def run_gui():

@@ -30,6 +30,7 @@ from ..calib.masters import (
     subtract_dark,
 )
 from ..core.image import AstroImage
+from ..core.stats import MAD_TO_SIGMA, median_mad, robust_sigma
 from ..grade.metrics import FrameQuality, grade_frame, score_qualities
 from .register import Transform, pick_reference, solve_transform, warp
 
@@ -171,10 +172,10 @@ def integrate(
         star_med = max(np.nanmedian(n_stars), 1.0)
         fwhm = np.array([q.fwhm for q in qualities])
         med_f = np.nanmedian(fwhm)
-        mad_f = np.nanmedian(np.abs(fwhm - med_f)) * 1.4826 + 1e-9
+        mad_f = robust_sigma(fwhm, eps=1e-9)
         bg = np.array([q.background for q in qualities])
         med_b = np.nanmedian(bg)
-        mad_b = np.nanmedian(np.abs(bg - med_b)) * 1.4826 + 1e-9
+        mad_b = robust_sigma(bg, eps=1e-9)
 
         kept_idx = []
         for i, q in enumerate(qualities):
@@ -289,10 +290,10 @@ def integrate(
                 y1 = min(y0 + strip_rows, out_h)
                 strip = np.asarray(cube[:, y0:y1])          # (n, rows, w[, 3])
                 valid = np.isfinite(strip)
-                med = np.nanmedian(strip, axis=0)
                 # Robust sigma via MAD: a plain std is inflated by the very outliers
                 # (satellite trails) we are trying to reject, hiding them at ~3.0 dev.
-                std = 1.4826 * np.nanmedian(np.abs(strip - med[None]), axis=0) + 1e-5
+                med, mad = median_mad(strip, axis=0)
+                std = mad * MAD_TO_SIGMA + 1e-5
                 dev = np.abs(strip - med[None]) / std[None]
                 keep = valid & (dev < rejection_sigma)
                 # Winsorize: clamp rejected-but-valid samples to the clip boundary

@@ -42,6 +42,17 @@ def test_background_extract_removes_gradient():
     assert out.history[-1]["op"] == "background_extract"
 
 
+def test_background_extract_tiny_image():
+    # Smaller than the default 24x24 sample grid: used to produce zero-area
+    # boxes whose percentile is NaN, poisoning the whole polynomial fit.
+    rng = np.random.default_rng(2)
+    data = (0.2 + 0.05 * rng.standard_normal((16, 16))).clip(0, 1).astype(np.float32)
+    img = AstroImage(data=data)
+    out = apply_op(img, "background_extract", degree=2)
+    assert np.all(np.isfinite(out.data))
+    assert out.data.shape == img.data.shape
+
+
 def test_stretches_brighten_and_mark_nonlinear():
     img = _color_img()
     for op, params in [("autostretch", {}), ("ghs", {"amount": 6.0}),
