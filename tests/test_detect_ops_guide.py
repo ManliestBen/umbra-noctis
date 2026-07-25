@@ -69,6 +69,38 @@ def test_clean_night_stays_clean(tmp_path):
     assert all(r.verdict == "clean" for r in results)
 
 
+def test_meteor_on_first_frame_detected(tmp_path):
+    """Frame 0 has no frame before it — it must still be scanned against its
+    one neighbor (frame 1) instead of being structurally unreachable."""
+    n = 6
+    frames = _night(tmp_path, n=n)
+    arr = _sky(0)
+    cv2.line(arr, (40, 60), (200, 150), 0.9, 2)
+    _write(tmp_path, "F000.fits", arr)  # overwrite frame 0 with a streak
+    results = scan_for_meteors(frames)
+    assert results[0].verdict == "meteor"
+    assert sum(r.verdict == "meteor" for r in results) == 1
+
+
+def test_meteor_on_last_frame_detected(tmp_path):
+    """Same edge-frame fix, other end: the last frame has no frame after it."""
+    n = 6
+    frames = _night(tmp_path, n=n)
+    arr = _sky(n - 1)
+    cv2.line(arr, (40, 60), (200, 150), 0.9, 2)
+    _write(tmp_path, f"F{n - 1:03d}.fits", arr)
+    results = scan_for_meteors(frames)
+    assert results[n - 1].verdict == "meteor"
+
+
+def test_shape_mismatch_logged(tmp_path):
+    frames = _night(tmp_path, n=6)
+    AstroImage(data=np.zeros((10, 10), dtype=np.float32)).save_fits(frames[2])
+    logs = []
+    scan_for_meteors(frames, log=logs.append)
+    assert any("SKIP shape mismatch" in m for m in logs)
+
+
 # ---------------------------------------------------------- trail upgrades
 def _trail_frames(tmp_path, n=6):
     paths = []
