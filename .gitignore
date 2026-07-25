@@ -12,3 +12,4 @@ testdata/
 scratch/
 *.fits.tmp
 .DS_Store
+demo/

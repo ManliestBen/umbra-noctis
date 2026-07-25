@@ -9,6 +9,7 @@ Every GUI capability is also scriptable here. Quick tour:
     umbra stack ./demo/DWARF_RAW_* -o stack.fits
     umbra process stack.fits -o done.jpg --op background_extract --op autostretch
     umbra ops                           # list every processing operation
+    umbra trails ./canon_frames -o trails.jpg   # star trails from DSLR frames
     umbra gui                           # launch the desktop app
 """
 
@@ -247,6 +248,41 @@ def cmd_planetary(args):
     print(f"\nUsed best {result.n_frames_used}/{result.n_frames_total} frames -> {out}")
 
 
+def cmd_trails(args):
+    from .calib.masters import build_master
+    from .export import export_image
+    from .stack.integrate import demosaic
+    from .stack.trails import collect_frames, trail_stack
+
+    frames = collect_frames(args.frames)
+    if not frames:
+        print("No supported frames found (FITS/CR2/NEF/ARW/DNG/JPEG/TIFF/PNG).")
+        sys.exit(1)
+    print(f"Trail stacking {len(frames)} frames"
+          + (" (aligned meteor composite)" if args.align else ""))
+
+    master_dark = None
+    if args.darks:
+        dark_frames = collect_frames([args.darks])
+        master_dark = build_master(dark_frames)
+        if master_dark.cfa:
+            master_dark = demosaic(master_dark)
+        print(f"  master dark from {len(dark_frames)} frames")
+
+    result = trail_stack(
+        frames, master_dark=master_dark, align=args.align,
+        cosmetic=not args.no_cosmetic,
+        progress=_progress_printer, log=lambda m: print("  " + m))
+
+    out = Path(args.output)
+    if out.suffix.lower() in (".fits", ".fit"):
+        result.image.save_fits(out)
+    else:
+        export_image(result.image, out)
+    print(f"\nBlended {result.n_frames} frames "
+          f"({result.n_skipped} skipped) -> {out}")
+
+
 def cmd_gui(args):
     try:
         from .gui.app import run_gui
@@ -336,6 +372,23 @@ def main(argv=None):
     p.add_argument("--keep", type=float, default=0.25, help="fraction of frames to keep")
     p.add_argument("--sharpen", type=float, default=0.8, help="wavelet sharpening amount")
     p.set_defaults(func=cmd_planetary)
+
+    p = sub.add_parser(
+        "trails",
+        help="star-trail / meteor composite: lighten-blend frames as shot")
+    p.add_argument("frames", nargs="+",
+                   help="folder(s) of frames or individual files "
+                        "(FITS, Canon CR2/CR3, NEF, ARW, DNG, JPEG, TIFF, PNG)")
+    p.add_argument("-o", "--output", required=True,
+                   help=".jpg/.tif/.png/.fits")
+    p.add_argument("--darks",
+                   help="folder of cap-on dark frames shot at the same settings")
+    p.add_argument("--align", action="store_true",
+                   help="register the star field first (meteor composites; "
+                        "leave off for star trails)")
+    p.add_argument("--no-cosmetic", action="store_true",
+                   help="skip statistical hot-pixel repair")
+    p.set_defaults(func=cmd_trails)
 
     p = sub.add_parser("gui", help="launch the desktop application")
     p.set_defaults(func=cmd_gui)

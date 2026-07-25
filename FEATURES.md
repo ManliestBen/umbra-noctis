@@ -335,7 +335,11 @@ The Dwarf 3 produces data with specific characteristics that drive many features
 - **P2 — Wide-cam ingestion:** catalog wide-angle captures alongside telephoto sessions;
   keep the two cameras' outputs linked when shot the same night.
 - **P2 — Star-trail composites:** max-value stacking with gap filling across timelapse
-  sets; comet-tail style trail fading option.
+  sets; comet-tail style trail fading option. *(Shipped as `umbra trails`: streaming
+  lighten blend with dark subtraction, statistical hot-pixel repair, and an `--align`
+  meteor-composite mode. Reads DSLR frames — Canon CR2/CR3, NEF, ARW, DNG via the
+  `dslr` extra — plus JPEG/TIFF/PNG/FITS, so the whole suite now ingests DSLR files
+  through `AstroImage.from_file`. Gap filling and trail fading still open.)*
 - **P2 — Nightscape processing:** sky/foreground segmentation masks so the sky can be
   stacked (noise reduction) while the landscape stays static; separate white balance
   for sky vs. ground.

@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 gui = ["PySide6>=6.6"]
+dslr = ["rawpy>=0.19"]
 dev = ["pytest>=8.0", "ruff>=0.4"]
 
 [project.scripts]

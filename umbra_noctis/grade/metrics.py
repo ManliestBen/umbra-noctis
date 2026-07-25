@@ -85,7 +85,7 @@ def grade_session(frames: list[str | Path], k: float = 3.5,
     """
     results: list[FrameQuality] = []
     for i, path in enumerate(frames):
-        q = grade_frame(AstroImage.from_fits(path), path)
+        q = grade_frame(AstroImage.from_file(path), path)
         results.append(q)
         if progress:
             progress(i + 1, len(frames))

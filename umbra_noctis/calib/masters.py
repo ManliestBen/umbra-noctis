@@ -31,7 +31,7 @@ def build_master(paths: list[str | Path], method: str = "sigma_clip",
     stack = []
     ref = None
     for i, p in enumerate(paths):
-        img = AstroImage.from_fits(p)
+        img = AstroImage.from_file(p)
         if ref is None:
             ref = img
         stack.append(img.data)
@@ -104,7 +104,7 @@ def hot_pixels_from_lights(paths: list[str | Path], k: float = 10.0,
     picks = list(paths)[:: max(1, len(paths) // sample)][:sample]
     minimum = None
     for p in picks:
-        d = AstroImage.from_fits(p).data
+        d = AstroImage.from_file(p).data
         if d.ndim == 3:
             d = d.mean(axis=2)
         minimum = d if minimum is None else np.minimum(minimum, d)

@@ -104,6 +104,27 @@ Lucky-imaging pipeline for Dwarf video captures: sharpness-rank all frames,
 keep the best fraction (`--keep`, default 0.25), align, stack, wavelet-
 sharpen (`--sharpen`, default 0.8; 0 disables).
 
+## `umbra trails <frames...> -o OUT [options]`
+
+Star-trail / meteor composites by **lighten (maximum) blending** — the
+opposite of `umbra stack`: frames are *not* registered, so the stars' motion
+between frames paints the trails. Accepts folders or files in any supported
+format: Dwarf FITS, DSLR raw (Canon CR2/CR3, NEF, ARW, DNG — needs the
+`dslr` extra: `pip install 'umbra-noctis[dslr]'`), JPEG, TIFF, PNG. Frames
+stream through running accumulators, so a 400-frame night uses the memory
+of ~3 frames.
+
+| Option | Meaning |
+|---|---|
+| `--darks DIR` | Cap-on dark frames (same settings) → master dark subtraction |
+| `--align` | Register the star field to the first frame before blending — use for **meteor-shower composites** (stars stay put, meteors accumulate); leave off for star trails |
+| `--no-cosmetic` | Skip statistical hot-pixel repair (on by default when no darks are given) |
+
+```bash
+umbra trails ./canon_night -o trails.jpg --darks ./canon_darks
+umbra trails ./perseids/*.CR2 -o meteors.tif --align
+```
+
 ## `umbra gui`
 
 Launch the desktop app (requires the `gui` extra: `pip install -e ".[gui]"`).

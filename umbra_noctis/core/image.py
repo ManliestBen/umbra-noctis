@@ -38,6 +38,21 @@ _META_KEYS = {
 _CFA_KEYS = ("BAYERPAT", "BAYER", "COLORTYP", "CFAPAT")
 _VALID_CFA = {"RGGB", "BGGR", "GRBG", "GBRG"}
 
+# Everything ``from_file`` can open, grouped by decoder.
+FITS_SUFFIXES = {".fits", ".fit", ".fts"}
+RAW_SUFFIXES = {".cr2", ".cr3", ".crw", ".nef", ".nrw", ".arw", ".dng",
+                ".raf", ".orf", ".rw2", ".pef", ".srw"}
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+FRAME_SUFFIXES = FITS_SUFFIXES | RAW_SUFFIXES | IMAGE_SUFFIXES
+
+# EXIF tags we normalize into AstroImage.meta (JPEG/TIFF from DSLRs).
+_EXIF_KEYS = {
+    "exposure_s": 0x829A,   # ExposureTime
+    "gain": 0x8827,         # ISOSpeedRatings — closest analog to gain
+    "instrument": 0x0110,   # Model
+    "date_obs": 0x9003,     # DateTimeOriginal
+}
+
 
 @dataclass
 class AstroImage:
@@ -123,6 +138,84 @@ class AstroImage:
             linear=True,
             source_path=path,
         )
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> "AstroImage":
+        """Load any supported frame: FITS, camera raw (CR2/CR3/NEF/ARW/DNG/...),
+        JPEG, PNG, or TIFF. This is the loader every pipeline should use so
+        that DSLR frames work everywhere Dwarf 3 FITS frames do.
+        """
+        path = Path(path)
+        suffix = path.suffix.lower()
+        if suffix in FITS_SUFFIXES:
+            return cls.from_fits(path)
+        if suffix in RAW_SUFFIXES:
+            return cls._from_camera_raw(path)
+        if suffix in IMAGE_SUFFIXES:
+            return cls._from_image_file(path)
+        raise ValueError(f"Unsupported frame format '{suffix}' ({path})")
+
+    @classmethod
+    def _from_camera_raw(cls, path: Path) -> "AstroImage":
+        """Decode a DSLR/mirrorless raw file to linear RGB via rawpy/libraw."""
+        try:
+            import rawpy
+        except ImportError:
+            raise ImportError(
+                f"Reading {path.suffix} camera raw files requires the 'rawpy' "
+                "package. Install it with: pip install 'umbra-noctis[dslr]'"
+            ) from None
+        with rawpy.imread(str(path)) as raw:
+            rgb = raw.postprocess(gamma=(1, 1), no_auto_bright=True,
+                                  output_bps=16, use_camera_wb=True)
+        data = np.ascontiguousarray(rgb.astype(np.float32) / 65535.0)
+        img = cls(data=data, linear=True, source_path=path)
+        img.record("load_raw", {"file": path.name})
+        return img
+
+    @classmethod
+    def _from_image_file(cls, path: Path) -> "AstroImage":
+        """Load a JPEG/PNG/TIFF. Display-referred formats are flagged
+        non-linear; EXIF exposure/ISO is carried into ``meta`` when present."""
+        from PIL import Image
+        import tifffile
+
+        suffix = path.suffix.lower()
+        meta: dict[str, Any] = {}
+        if suffix in (".tif", ".tiff"):
+            raw = tifffile.imread(path)
+        else:
+            with Image.open(path) as pil:
+                try:
+                    exif = pil.getexif()
+                    merged = dict(exif) | dict(exif.get_ifd(0x8769))
+                    for key, tag in _EXIF_KEYS.items():
+                        if tag in merged:
+                            val = merged[tag]
+                            meta[key] = float(val) if key in ("exposure_s", "gain") \
+                                else str(val)
+                except Exception:
+                    pass
+                raw = np.asarray(pil.convert("RGB") if pil.mode not in
+                                 ("L", "I;16", "I", "F", "RGB") else pil)
+
+        if raw.dtype.kind in "ui":
+            data = raw.astype(np.float32) / float(np.iinfo(raw.dtype).max)
+        else:
+            data = raw.astype(np.float32)
+            if data.size and float(np.nanmax(data)) > 1.5:
+                data = data / float(np.nanmax(data))
+        data = np.nan_to_num(data, nan=0.0, posinf=1.0, neginf=0.0)
+        if data.ndim == 3 and data.shape[2] > 3:  # drop alpha
+            data = data[..., :3]
+
+        # 16-bit TIFFs from astro tools are usually linear; 8-bit and JPEG are
+        # display-referred (already gamma-encoded).
+        linear = suffix in (".tif", ".tiff") and raw.dtype.itemsize > 1
+        img = cls(data=np.ascontiguousarray(data), meta=meta,
+                  linear=linear, source_path=path)
+        img.record("load_image", {"file": path.name})
+        return img
 
     def save_fits(self, path: str | Path, bits: int = 32) -> Path:
         """Write to FITS. ``bits=16`` writes uint16 (interchange), 32 writes

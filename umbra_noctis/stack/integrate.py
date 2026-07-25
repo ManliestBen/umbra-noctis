@@ -119,7 +119,7 @@ def integrate(
     frames: list[AstroImage] = []
     qualities: list[FrameQuality] = []
     for i, path in enumerate(light_paths):
-        img = AstroImage.from_fits(path)
+        img = AstroImage.from_file(path)
         if master_dark is not None:
             img = subtract_dark(img, master_dark)
         if master_flat is not None:

@@ -24,6 +24,10 @@ so any result can be reproduced.
 - **Library** — every session cataloged by target with integration totals
   across nights.
 - **Planetary** — lucky-imaging stacks from Dwarf video captures.
+- **Star trails & meteor composites** — lighten-blend stacking of DSLR
+  nights (`umbra trails`): Canon CR2/CR3 and other camera raws, JPEG, TIFF,
+  and FITS, with dark subtraction, hot-pixel repair, and an `--align` mode
+  that registers the star field for meteor-shower composites.
 - **Plate solving & annotation** — via ASTAP, astrometry.net, or the free
   nova.astrometry.net web API.
 - **Recipes & automation** — save any processing chain as JSON, replay it on
