@@ -93,7 +93,9 @@ def test_reimport_keeps_frames_attached(tmp_path):
     s = parse_session(light_dir)
     sid, _ = lib.import_session(s)
 
-    lib.import_session(parse_session(light_dir))
+    sid2, new2 = lib.import_session(parse_session(light_dir))
+    assert sid2 == sid
+    assert new2 is False
 
     frames = lib.frames(sid)
     assert len(frames) == s.frame_count == 4
@@ -115,6 +117,7 @@ def test_different_folder_same_data_both_kept(tmp_path):
     sid2, new2 = lib.import_session(parse_session(copy_dir))
 
     assert new1
+    assert new2 is True, "the copied folder is a genuinely new path and must be reported as new"
     assert sid1 != sid2
     assert len(lib.sessions()) == 2
     lib.close()

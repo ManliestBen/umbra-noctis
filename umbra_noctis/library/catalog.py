@@ -121,6 +121,10 @@ class Library:
         if existing and Path(existing["path"]) == session.path:
             return existing["id"], False
 
+        pre = self.conn.execute(
+            "SELECT id FROM sessions WHERE path = ?", (str(session.path),)
+        ).fetchone()
+
         info = resolve_target(session.target)
         cur = self.conn.execute(
             """INSERT INTO sessions (path, fingerprint, kind, lens, target_raw, target,
@@ -146,7 +150,7 @@ class Library:
                 (sid, str(light), i),
             )
         self.conn.commit()
-        return sid, existing is None
+        return sid, pre is None
 
     # ------------------------------------------------------------- queries
     def sessions(self, target: str | None = None, kind: str | None = None) -> list[sqlite3.Row]:
