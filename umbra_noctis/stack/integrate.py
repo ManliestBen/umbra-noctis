@@ -15,6 +15,7 @@ Memory strategy: registered frames are streamed into per-strip stacks so an
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,8 +30,8 @@ from ..calib.masters import (
     subtract_dark,
 )
 from ..core.image import AstroImage
-from ..grade.metrics import FrameQuality, grade_frame
-from .register import Transform, pick_reference, register_frames, warp
+from ..grade.metrics import FrameQuality, grade_frame, score_qualities
+from .register import Transform, pick_reference, solve_transform, warp
 
 _CV_BAYER = {
     # OpenCV pattern names refer to the 2×2 tile at (0,0) read as BGR order.
@@ -87,6 +88,8 @@ def integrate(
     normalize: bool = True,
     drizzle: float = 1.0,
     strip_rows: int = 128,
+    qualities: list[FrameQuality] | None = None,
+    work_dir: str | Path | None = None,
     progress=None,
     log=None,
 ) -> StackResult:
@@ -94,6 +97,12 @@ def integrate(
 
     ``drizzle=2.0`` integrates onto a 2× grid (needs many well-dithered subs).
     ``progress(stage, done, total)`` and ``log(str)`` are optional callbacks.
+    ``qualities``, if given, must be the same length and order as
+    ``light_paths`` (e.g. already computed by a Grade step) — supplying it
+    skips re-grading every frame from scratch. ``work_dir`` picks where the
+    disk-backed integration cube's temp directory is created (default: the
+    platform temp dir, which is often tmpfs/RAM-backed — pass a path on a
+    real disk with enough free space for large sessions).
     """
     logs: list[str] = []
 
@@ -120,9 +129,16 @@ def integrate(
         hot_map = hot_pixels_from_lights(light_paths)
         _log(f"No dark — statistical hot-pixel map from lights: {int(hot_map.sum())} pixels")
 
-    frames: list[AstroImage] = []
-    qualities: list[FrameQuality] = []
-    for i, path in enumerate(light_paths):
+    qualities_supplied = qualities is not None
+    if qualities_supplied and len(qualities) != len(light_paths):
+        raise ValueError(
+            f"qualities has {len(qualities)} entries but light_paths has "
+            f"{len(light_paths)} — they must be the same length and order")
+
+    def _load_calibrated(path: str | Path) -> AstroImage:
+        """Load one frame and apply dark/flat/cosmetic/demosaic calibration —
+        the one calibration path shared by pass 1 (metrics only) and pass 2
+        (integration), so a frame is never calibrated two different ways."""
         img = AstroImage.from_file(path)
         if master_dark is not None:
             img = subtract_dark(img, master_dark)
@@ -132,13 +148,24 @@ def integrate(
             img = cosmetic_correction(img, hot_map)
         if img.cfa:
             img = demosaic(img, demosaic_method)
-        frames.append(img)
-        qualities.append(grade_frame(img, path))
+        return img
+
+    # --------------------------------------------------------- pass 1: grade
+    # Only the FrameQuality survives each iteration — pixels are discarded
+    # immediately, so this never holds more than one decoded frame at a time
+    # regardless of session size.
+    qualities = list(qualities) if qualities_supplied else []
+    for i, path in enumerate(light_paths):
+        if not qualities_supplied:
+            img = _load_calibrated(path)
+            qualities.append(grade_frame(img, path))
         _prog("calibrate", i + 1, len(light_paths))
+    if not qualities_supplied:
+        score_qualities(qualities)
 
     # ------------------------------------------------------- quality filter
-    kept_idx = list(range(len(frames)))
-    if quality_filter and len(frames) >= 5:
+    kept_idx = list(range(len(light_paths)))
+    if quality_filter and len(light_paths) >= 5:
         # Re-run the session-relative rejection on already-computed metrics.
         n_stars = np.array([q.n_stars for q in qualities], dtype=float)
         star_med = max(np.nanmedian(n_stars), 1.0)
@@ -165,35 +192,30 @@ def integrate(
             else:
                 _log(f"REJECT {Path(str(light_paths[i])).name}: {', '.join(reasons)}")
         # best-N% cut by score
-        kept_idx.sort(key=lambda i: -(qualities[i].score or 0))
-        ranked = sorted(kept_idx, key=lambda i: -(qualities[i].n_stars))
+        ranked = sorted(kept_idx, key=lambda i: -(qualities[i].score or 0))
         n_keep = max(3, int(round(len(ranked) * best_fraction)))
         kept_idx = sorted(ranked[:n_keep])
     if len(kept_idx) < 1:
-        kept_idx = list(range(len(frames)))
+        kept_idx = list(range(len(light_paths)))
         _log("Quality filter removed everything — keeping all frames instead")
-    _log(f"Using {len(kept_idx)}/{len(frames)} frames")
+    _log(f"Using {len(kept_idx)}/{len(light_paths)} frames")
 
-    used = [frames[i] for i in kept_idx]
+    kept_paths = [light_paths[i] for i in kept_idx]
     used_q = [qualities[i] for i in kept_idx]
+    n = len(kept_paths)
 
     # ---------------------------------------------------------- registration
     ref_local = pick_reference(used_q)
-    transforms = register_frames(used, ref_local,
-                                 progress=lambda d, t: _prog("register", d, t))
-    solved = [t for t in transforms if t.method != "identity"]
-    if solved:
-        rot_span = max(abs(t.rotation_deg) for t in solved)
-        _log(f"Registration: {sum(1 for t in solved if t.method == 'stars')} star-solved, "
-             f"{sum(1 for t in solved if t.method == 'phase')} phase-only; "
-             f"max field rotation {rot_span:.2f} deg")
 
-    # ------------------------------------------------------------ integrate
-    ref_img = used[ref_local]
+    # Reload the reference frame once, here at the start of pass 2: pass 1
+    # discarded every frame's pixels, keeping only its FrameQuality, so the
+    # reference's data is needed again both as the registration target below
+    # and for the luminance normalization stats every other kept frame is
+    # matched against.
+    ref_img = _load_calibrated(kept_paths[ref_local])
     out_h = int(ref_img.height * drizzle)
     out_w = int(ref_img.width * drizzle)
     is_color = ref_img.is_color
-    n = len(used)
 
     ref_lum = ref_img.luminance()
     ref_median = float(np.nanmedian(ref_lum))
@@ -204,55 +226,97 @@ def integrate(
         scores = np.array([max(q.score, 1.0) for q in used_q], dtype=np.float32)
         weights = scores / scores.max()
 
-    # Warp each frame once, store to a disk-backed memmap, then reduce strips.
-    tmpdir = tempfile.TemporaryDirectory(prefix="umbra_stack_")
+    # --------------------------------------------------- pass 2: warp + write
+    # One kept path at a time: reload, calibrate (same _load_calibrated as
+    # pass 1), solve its transform against the already-loaded reference,
+    # warp straight into the disk-backed memmap, then drop it. At no point
+    # does this loop hold more than the reference frame plus the one frame
+    # currently being processed.
+    #
+    # The temp dir (and therefore the memmap) defaults to the platform temp
+    # location, which is frequently tmpfs (i.e. RAM) — pass work_dir= to put
+    # it on a real disk for large sessions. The `with` block guarantees the
+    # directory is removed on every exit path, success or exception; the
+    # inner try/finally releases the memmap first so nothing holds the
+    # backing file open when the directory is removed.
     shape = (n, out_h, out_w, 3) if is_color else (n, out_h, out_w)
-    cube = np.memmap(Path(tmpdir.name) / "cube.dat", dtype=np.float32,
-                     mode="w+", shape=shape)
-    for i, (img, t) in enumerate(zip(used, transforms, strict=False)):
-        data = img.data
-        if normalize and i != ref_local:
-            data = _normalize_to_ref(data, ref_median, ref_scale)
-        cube[i] = warp(data, t, order=1, output_shape=(out_h, out_w),
-                       upscale=drizzle)
-        _prog("integrate", i + 1, n + 1)
+    cube_bytes = int(np.prod(shape)) * np.dtype(np.float32).itemsize
+    if work_dir is not None:
+        Path(work_dir).mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="umbra_stack_",
+                                     dir=str(work_dir) if work_dir else None) as tmpdir_name:
+        free = shutil.disk_usage(tmpdir_name).free
+        if free < cube_bytes * 1.1:
+            raise RuntimeError(
+                f"Not enough free disk space to stack {n} frames at "
+                f"{out_h}x{out_w}: need ~{cube_bytes / 1e9:.2f} GB (10% headroom "
+                f"included) in {tmpdir_name}, only {free / 1e9:.2f} GB free. "
+                f"Pass work_dir= to point integrate() at a drive with more room.")
 
-    result = np.zeros(shape[1:], dtype=np.float32)
-    rejected_px = 0
-    total_px = 0
-    w_col = weights.reshape(-1, *([1] * (len(shape) - 1)))
-    for y0 in range(0, out_h, strip_rows):
-        y1 = min(y0 + strip_rows, out_h)
-        strip = np.asarray(cube[:, y0:y1])          # (n, rows, w[, 3])
-        valid = np.isfinite(strip)
-        med = np.nanmedian(strip, axis=0)
-        # Robust sigma via MAD: a plain std is inflated by the very outliers
-        # (satellite trails) we are trying to reject, hiding them at ~3.0 dev.
-        std = 1.4826 * np.nanmedian(np.abs(strip - med[None]), axis=0) + 1e-5
-        dev = np.abs(strip - med[None]) / std[None]
-        keep = valid & (dev < rejection_sigma)
-        # Winsorize: clamp rejected-but-valid samples to the clip boundary
-        lo = med[None] - rejection_sigma * std[None]
-        hi = med[None] + rejection_sigma * std[None]
-        wins = np.clip(np.where(valid, strip, med[None]), lo, hi)
-        wmask = np.where(valid, w_col, 0.0).astype(np.float32)
-        # full weight where kept, quarter weight where winsorized
-        wmask = np.where(keep, wmask, wmask * 0.25)
-        denom = wmask.sum(axis=0)
-        result[y0:y1] = np.where(denom > 0, (wins * wmask).sum(axis=0) / np.maximum(denom, 1e-9),
-                                 med)
-        rejected_px += int((valid & ~keep).sum())
-        total_px += int(valid.sum())
-    _prog("integrate", n + 1, n + 1)
-    del cube
-    tmpdir.cleanup()
+        cube = np.memmap(Path(tmpdir_name) / "cube.dat", dtype=np.float32,
+                         mode="w+", shape=shape)
+        try:
+            transforms: list[Transform] = []
+            for i, path in enumerate(kept_paths):
+                if i == ref_local:
+                    img, t = ref_img, Transform.identity()
+                else:
+                    img = _load_calibrated(path)
+                    t = solve_transform(img, ref_img)
+                transforms.append(t)
+                _prog("register", i + 1, n)
+
+                data = img.data
+                if normalize and i != ref_local:
+                    data = _normalize_to_ref(data, ref_median, ref_scale)
+                cube[i] = warp(data, t, order=1, output_shape=(out_h, out_w),
+                               upscale=drizzle)
+                _prog("integrate", i + 1, n + 1)
+                del img, data
+
+            solved = [t for t in transforms if t.method != "identity"]
+            if solved:
+                rot_span = max(abs(t.rotation_deg) for t in solved)
+                _log(f"Registration: {sum(1 for t in solved if t.method == 'stars')} "
+                     f"star-solved, {sum(1 for t in solved if t.method == 'phase')} "
+                     f"phase-only; max field rotation {rot_span:.2f} deg")
+
+            result = np.zeros(shape[1:], dtype=np.float32)
+            rejected_px = 0
+            total_px = 0
+            w_col = weights.reshape(-1, *([1] * (len(shape) - 1)))
+            for y0 in range(0, out_h, strip_rows):
+                y1 = min(y0 + strip_rows, out_h)
+                strip = np.asarray(cube[:, y0:y1])          # (n, rows, w[, 3])
+                valid = np.isfinite(strip)
+                med = np.nanmedian(strip, axis=0)
+                # Robust sigma via MAD: a plain std is inflated by the very outliers
+                # (satellite trails) we are trying to reject, hiding them at ~3.0 dev.
+                std = 1.4826 * np.nanmedian(np.abs(strip - med[None]), axis=0) + 1e-5
+                dev = np.abs(strip - med[None]) / std[None]
+                keep = valid & (dev < rejection_sigma)
+                # Winsorize: clamp rejected-but-valid samples to the clip boundary
+                lo = med[None] - rejection_sigma * std[None]
+                hi = med[None] + rejection_sigma * std[None]
+                wins = np.clip(np.where(valid, strip, med[None]), lo, hi)
+                wmask = np.where(valid, w_col, 0.0).astype(np.float32)
+                # full weight where kept, quarter weight where winsorized
+                wmask = np.where(keep, wmask, wmask * 0.25)
+                denom = wmask.sum(axis=0)
+                result[y0:y1] = np.where(
+                    denom > 0, (wins * wmask).sum(axis=0) / np.maximum(denom, 1e-9), med)
+                rejected_px += int((valid & ~keep).sum())
+                total_px += int(valid.sum())
+            _prog("integrate", n + 1, n + 1)
+        finally:
+            del cube
 
     stacked = ref_img.with_data(np.clip(np.nan_to_num(result, nan=0.0), 0.0, 1.0))
-    stacked.meta["n_stacked"] = len(used)
+    stacked.meta["n_stacked"] = n
     stacked.meta["total_integration_s"] = (
-        float(ref_img.meta.get("exposure_s", 0) or 0) * len(used))
+        float(ref_img.meta.get("exposure_s", 0) or 0) * n)
     stacked.record("integrate", {
-        "n_frames": len(used), "rejection_sigma": rejection_sigma,
+        "n_frames": n, "rejection_sigma": rejection_sigma,
         "weighting": weighting, "normalize": normalize, "drizzle": drizzle,
     })
 
@@ -263,8 +327,8 @@ def integrate(
 
     return StackResult(
         image=stacked,
-        n_used=len(used),
-        n_rejected_frames=len(frames) - len(used),
+        n_used=n,
+        n_rejected_frames=len(light_paths) - n,
         qualities=qualities,
         transforms=transforms,
         reference_index=kept_idx[ref_local],

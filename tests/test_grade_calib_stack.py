@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -11,6 +13,7 @@ from umbra_noctis.calib import (
 )
 from umbra_noctis.core.image import AstroImage
 from umbra_noctis.grade import grade_session
+from umbra_noctis.grade.metrics import FrameQuality
 from umbra_noctis.ingest import parse_session
 from umbra_noctis.stack import integrate
 from umbra_noctis.stack.register import solve_transform
@@ -88,6 +91,33 @@ def test_build_master_sigma_clip(tmp_path):
     assert abs(float(master.data[10, 10]) - 0.05) < 0.02  # outlier rejected
 
 
+def test_build_master_mixed_shapes_raises(tmp_path):
+    p1 = tmp_path / "a.fits"
+    p2 = tmp_path / "b.fits"
+    fits.PrimaryHDU(np.full((40, 40), 6553, dtype=np.uint16)).writeto(p1)
+    fits.PrimaryHDU(np.full((30, 30), 6553, dtype=np.uint16)).writeto(p2)
+    with pytest.raises(ValueError, match="b.fits"):
+        build_master([str(p1), str(p2)])
+
+
+def test_build_master_all_rejected_pixel_falls_back_to_median(tmp_path):
+    h, w = 20, 20
+    paths = []
+    for i in range(8):
+        f = np.full((h, w), 0.1, dtype=np.float32)
+        f[5, 5] = 1.0 if i % 2 == 0 else 0.0  # alternating extremes, exact 50/50 split
+        p = tmp_path / f"c{i}.fits"
+        fits.PrimaryHDU((np.clip(f, 0, 1) * 65535).astype(np.uint16)).writeto(p)
+        paths.append(str(p))
+    # For a perfectly symmetric 50/50 split every sample's z-score (relative
+    # to the population std) is exactly 1.0 — sigma=0.5 rejects all of them
+    # at that pixel, exercising the "everything rejected" fallback.
+    master = build_master(paths, method="sigma_clip", sigma=0.5)
+    assert abs(float(master.data[5, 5]) - 0.5) < 0.02, \
+        "an all-rejected pixel should fall back to the median (0.5), not go to 0"
+    assert abs(float(master.data[0, 0]) - 0.1) < 0.01  # unaffected background
+
+
 def test_synthetic_flat_flattens_vignette():
     yy, xx = np.mgrid[0:200, 0:300]
     r2 = ((xx - 150) / 150.0) ** 2 + ((yy - 100) / 100.0) ** 2
@@ -105,6 +135,60 @@ def test_synthetic_flat_flattens_vignette():
 def test_sep_backend_available():
     from umbra_noctis.grade import stars
     assert stars._HAVE_SEP, "sep must be installed — star detection quality depends on it"
+
+
+def test_integrate_scores_frames(tmp_path):
+    """grade_frame alone never sets .score — integrate must run the
+    composite scorer so weighting, best-fraction, and reference selection
+    all have real numbers to work with, not silent all-ones/all-zeros."""
+    light_dir, _ = write_demo_session(tmp_path, n_lights=8, n_darks=0)
+    session = parse_session(light_dir)
+    result = integrate(session.lights)
+    scores = [q.score for q in result.qualities]
+    assert any(s > 0 for s in scores)
+    assert len(set(scores)) > 1, "scores should differ frame to frame, not be uniform"
+
+
+def test_reference_is_not_blindly_first(tmp_path):
+    """pick_reference already sorts by score; once scores are real, the
+    chosen reference must be the sharpest KEPT frame, not always index 0."""
+    light_dir, _ = write_demo_session(tmp_path, n_lights=8, n_darks=0)
+    session = parse_session(light_dir)
+    result = integrate(session.lights)
+    kept_qualities = [(i, q) for i, q in enumerate(result.qualities) if q.accepted]
+    best_kept_index = max(kept_qualities, key=lambda iq: iq[1].score)[0]
+    assert result.reference_index == best_kept_index
+
+
+def test_integrate_cleans_tmp_on_failure(tmp_path, monkeypatch):
+    """A failure partway through pass 2 (register+warp) must not leak the
+    disk-backed integration cube's temp directory."""
+    light_dir, _ = write_demo_session(tmp_path / "data", n_lights=4, n_darks=0)
+    session = parse_session(light_dir)
+    # Equal scores so pick_reference deterministically picks index 0 (first
+    # on ties) — the failure below then hits on the 2nd frame processed.
+    quals = [FrameQuality(path=str(p), n_stars=50, fwhm=3.0, ellipticity=0.1,
+                          background=0.05, noise=0.01, score=50.0)
+             for p in session.lights]
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("simulated registration failure")
+
+    # umbra_noctis/stack/__init__.py does `from .integrate import integrate`,
+    # which rebinds the package attribute `stack.integrate` to the function —
+    # so both the dotted-string form of monkeypatch.setattr AND a plain
+    # `import umbra_noctis.stack.integrate as m` resolve to that function
+    # instead of the submodule. sys.modules is the one place the actual
+    # submodule object is guaranteed to still be found under its own name.
+    integrate_mod = sys.modules["umbra_noctis.stack.integrate"]
+    monkeypatch.setattr(integrate_mod, "solve_transform", _boom)
+
+    work = tmp_path / "work"
+    work.mkdir()
+    with pytest.raises(RuntimeError):
+        integrate(session.lights, quality_filter=False, qualities=quals, work_dir=work)
+
+    assert list(work.glob("umbra_stack_*")) == []
 
 
 @pytest.mark.slow

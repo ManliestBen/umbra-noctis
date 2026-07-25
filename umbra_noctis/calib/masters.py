@@ -11,12 +11,15 @@ therefore works in three tiers:
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import numpy as np
 from scipy import ndimage
 
 from ..core.image import AstroImage
+
+_MASTER_STRIP_ROWS = 64
 
 
 def build_master(paths: list[str | Path], method: str = "sigma_clip",
@@ -25,30 +28,75 @@ def build_master(paths: list[str | Path], method: str = "sigma_clip",
 
     ``method``: "median" (robust, default for few frames), "mean", or
     "sigma_clip" (mean after iterative outlier rejection — best with ≥8 frames).
+
+    Memory: ``mean`` never holds more than one frame plus a running float64
+    accumulator; ``median``/``sigma_clip`` need every sample per pixel to
+    reduce, so frames are streamed into a disk-backed memmap cube and reduced
+    in row-strips rather than held as one in-RAM stack (~5x a frame's size
+    for a typical calibration set, more for large ones).
     """
     if not paths:
         raise ValueError("No frames given")
-    stack = []
-    ref = None
-    for i, p in enumerate(paths):
+
+    method_eff = "median" if (method == "median" or len(paths) < 4) else method
+
+    ref: AstroImage | None = None
+    shape0: tuple | None = None
+
+    def _load_checked(p):
+        nonlocal ref, shape0
         img = AstroImage.from_file(p)
         if ref is None:
             ref = img
-        stack.append(img.data)
-        if progress:
-            progress(i + 1, len(paths))
-    cube = np.stack(stack, axis=0)
+            shape0 = img.data.shape
+        elif img.data.shape != shape0:
+            raise ValueError(
+                f"Calibration frames must all share one shape: {paths[0]} is "
+                f"{shape0} but {p} is {img.data.shape}")
+        return img
 
-    if method == "median" or len(paths) < 4:
-        master = np.median(cube, axis=0)
-    elif method == "mean":
-        master = cube.mean(axis=0)
-    else:  # sigma_clip
-        med = np.median(cube, axis=0)
-        std = cube.std(axis=0) + 1e-9
-        mask = np.abs(cube - med) < sigma * std
-        weights = mask.astype(np.float32)
-        master = (cube * weights).sum(axis=0) / np.maximum(weights.sum(axis=0), 1.0)
+    if method_eff == "mean":
+        acc: np.ndarray | None = None
+        for i, p in enumerate(paths):
+            img = _load_checked(p)
+            frame = img.data.astype(np.float64)
+            acc = frame if acc is None else acc + frame
+            if progress:
+                progress(i + 1, len(paths))
+        master = (acc / len(paths)).astype(np.float32)
+    else:
+        with tempfile.TemporaryDirectory(prefix="umbra_master_") as tmpdir_name:
+            cube = None
+            try:
+                for i, p in enumerate(paths):
+                    img = _load_checked(p)
+                    if cube is None:
+                        shape = (len(paths),) + shape0
+                        cube = np.memmap(Path(tmpdir_name) / "cube.dat", dtype=np.float32,
+                                         mode="w+", shape=shape)
+                    cube[i] = img.data
+                    if progress:
+                        progress(i + 1, len(paths))
+
+                master = np.zeros(shape0, dtype=np.float32)
+                for y0 in range(0, shape0[0], _MASTER_STRIP_ROWS):
+                    y1 = min(y0 + _MASTER_STRIP_ROWS, shape0[0])
+                    strip = np.asarray(cube[:, y0:y1])
+                    if method_eff == "median":
+                        master[y0:y1] = np.median(strip, axis=0)
+                    else:  # sigma_clip
+                        med = np.median(strip, axis=0)
+                        std = strip.std(axis=0) + 1e-9
+                        mask = np.abs(strip - med) < sigma * std
+                        weights = mask.astype(np.float32)
+                        wsum = weights.sum(axis=0)
+                        weighted_mean = (strip * weights).sum(axis=0) / np.maximum(wsum, 1.0)
+                        # A pixel rejected in every sample has no weighted mean
+                        # to fall back on — use the (unweighted) median instead
+                        # of silently going to 0.
+                        master[y0:y1] = np.where(wsum > 0, weighted_mean, med)
+            finally:
+                del cube
 
     out = ref.with_data(master.astype(np.float32))
     out.meta["n_frames"] = len(paths)
