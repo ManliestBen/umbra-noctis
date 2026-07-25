@@ -161,7 +161,7 @@ percentage of pixel samples the rejection removed.
 
 ## 6. Processing operations
 
-All 25 operations live in one registry; the GUI tool panels, the CLI, recipes,
+Every operation lives in one registry; the GUI tool panels, the CLI, recipes,
 and [OPERATIONS.md](OPERATIONS.md) (full parameter tables) are all generated
 from it. CLI syntax: `--op name:param=value,param=value`, repeatable and
 applied in order.

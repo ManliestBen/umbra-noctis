@@ -183,8 +183,9 @@ step.
 you'll stack (trails, meteors — it blanks the sensor between frames and
 dashes your trails); ON only for a single continuous bulb exposure.
 
-**Where does the library live?** `~/.umbra-noctis` by default; every
-command takes `--db` to use another location. Raw files are never modified.
+**Where does the library live?** `~/.umbra-noctis` by default; `umbra import`
+and `umbra library` take `--db` to use another location. Raw files are
+never modified.
 
 **Stacking looks misaligned / trails look erased?** You used the wrong tool:
 `umbra stack` aligns stars (deep-sky), `umbra trails` does not (trails).
