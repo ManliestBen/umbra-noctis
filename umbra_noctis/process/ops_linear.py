@@ -52,18 +52,42 @@ def background_extract(img: AstroImage, degree: int = 2, samples: int = 24,
                 terms.append((x ** i) * (y ** j))
         return np.stack(terms, axis=-1)
 
+    # Clamp the sample grid to the image size — with a small image (or a
+    # thumbnail passed through by mistake), a naive `samples`-per-axis grid
+    # produces zero-area boxes whose percentile is NaN, poisoning the whole
+    # fit. Cap per-axis resolution at the pixel count and skip any box that
+    # still comes out empty.
+    samples_y = min(samples, h)
+    samples_x = min(samples, w)
+    boxes = []
+    for iy in range(samples_y):
+        y0, y1 = iy * h // samples_y, (iy + 1) * h // samples_y
+        if y1 <= y0:
+            continue
+        for ix in range(samples_x):
+            x0, x1 = ix * w // samples_x, (ix + 1) * w // samples_x
+            if x1 <= x0:
+                continue
+            boxes.append((y0, y1, x0, x1))
+
+    if len(boxes) < 6:
+        # Too few valid samples to fit even the simplest (degree-1) model —
+        # leave the image alone rather than divide/subtract a NaN model.
+        result = img.copy()
+        result.record("background_extract_skipped", {
+            "reason": "too few valid background samples (<6) — image too "
+                      "small for the sample grid; returned unchanged"})
+        return result
+
     out = np.empty_like(data)
     for c in range(nc):
         ch = data[..., c]
         sy_l, sx_l, val = [], [], []
-        for iy in range(samples):
-            for ix in range(samples):
-                y0, y1 = iy * h // samples, (iy + 1) * h // samples
-                x0, x1 = ix * w // samples, (ix + 1) * w // samples
-                cell = ch[y0:y1, x0:x1]
-                val.append(np.percentile(cell, 25))  # sky, below stars/nebula
-                sy_l.append((y0 + y1) / 2)
-                sx_l.append((x0 + x1) / 2)
+        for y0, y1, x0, x1 in boxes:
+            cell = ch[y0:y1, x0:x1]
+            val.append(np.percentile(cell, 25))  # sky, below stars/nebula
+            sy_l.append((y0 + y1) / 2)
+            sx_l.append((x0 + x1) / 2)
         val = np.array(val)
         # reject samples that sit on nebulosity: sigma-clip against global trend
         med, mad_raw = median_mad(val)

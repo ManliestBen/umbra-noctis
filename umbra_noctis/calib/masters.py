@@ -201,17 +201,39 @@ def synthetic_flat(img: AstroImage, box: int = 64) -> AstroImage:
     """
     lum = img.luminance()
     h, w = lum.shape
-    ny, nx = max(6, h // box), max(6, w // box)
+    # Clamp the grid to the image size: with a tiny image, max(6, h // box)
+    # could still exceed h, producing zero-area boxes whose percentile is
+    # NaN and poisons the whole fit.
+    ny, nx = min(max(6, h // box), h), min(max(6, w // box), w)
     samples, sy, sx = [], [], []
     for iy in range(ny):
+        y0, y1 = iy * h // ny, (iy + 1) * h // ny
+        if y1 <= y0:
+            continue
         for ix in range(nx):
-            y0, y1 = iy * h // ny, (iy + 1) * h // ny
             x0, x1 = ix * w // nx, (ix + 1) * w // nx
+            if x1 <= x0:
+                continue
             # Median per box: robust to stars (few pixels) yet unbiased in a
             # gradient, unlike a low percentile which undershoots at corners.
             samples.append(np.percentile(lum[y0:y1, x0:x1], 50))
             sy.append((y0 + y1) / 2.0)
             sx.append((x0 + x1) / 2.0)
+
+    if len(samples) < 6:
+        # Too few valid samples to fit the vignetting model — return a
+        # neutral (all-ones) flat instead of a NaN surface; apply_flat
+        # dividing by 1 is a no-op.
+        flat = np.ones((h, w), dtype=np.float32)
+        if img.is_color:
+            flat = np.repeat(flat[..., None], 3, axis=2)
+        out = img.with_data(flat)
+        out.record("synthetic_flat_skipped", {
+            "box": box,
+            "reason": "too few valid samples (<6) — image too small for "
+                      "the sample grid; returned a neutral flat"})
+        return out
+
     # Vignetting is smooth and radial: fit a 2nd-degree 2-D polynomial
     # (1, x, y, x², xy, y²) to the star-free box samples.
     sxn = (np.array(sx) - w / 2) / w

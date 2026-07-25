@@ -134,7 +134,7 @@ class AstroImage:
             meta=meta,
             fits_header=header,
             cfa=cfa,
-            linear=True,
+            linear=bool(header.get("UMBLIN", True)),
             source_path=path,
         )
 
@@ -242,6 +242,7 @@ class AstroImage:
                     continue
         if self.cfa:
             header["BAYERPAT"] = self.cfa
+        header["UMBLIN"] = (bool(self.linear), "Umbra Noctis: data is linear, not stretched")
         header["SWCREATE"] = "Umbra Noctis"
         for entry in self.history:
             header.add_history(json.dumps(entry, default=str)[:70])
