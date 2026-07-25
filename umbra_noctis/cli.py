@@ -149,6 +149,7 @@ def cmd_stack(args):
     from .ingest import parse_session
     from .recipes.auto import find_matching_darks
     from .stack import integrate
+    from .stack.integrate import demosaic
 
     s = parse_session(args.session)
     print(f"Stacking: {s.summary()}")
@@ -165,9 +166,18 @@ def cmd_stack(args):
             master_dark = build_master(found.lights)
             print(f"  master dark auto-found: {found.path.name}")
 
+    master_flat = None
+    if args.flats:
+        from .ingest import parse_session as ps
+        flats = ps(args.flats)
+        master_flat = build_master(flats.lights, method="median")
+        if master_flat.cfa:
+            master_flat = demosaic(master_flat)
+        print(f"  master flat from {len(flats.lights)} frames")
+
     out = Path(args.output)
     result = integrate(
-        s.lights, master_dark=master_dark,
+        s.lights, master_dark=master_dark, master_flat=master_flat,
         rejection_sigma=args.sigma, drizzle=args.drizzle,
         best_fraction=args.best, quality_filter=not args.keep_all,
         work_dir=out.parent,
@@ -458,6 +468,9 @@ def main(argv=None):
     p.add_argument("-o", "--output", required=True, help=".fits recommended")
     p.add_argument("--darks", help="dark session folder (auto-detected if omitted)")
     p.add_argument("--no-darks", action="store_true", help="skip dark search")
+    p.add_argument("--flats",
+                   help="flat-field session folder (t-shirt/panel flats); "
+                        "builds a master flat")
     p.add_argument("--sigma", type=float, default=3.0, help="pixel rejection sigma")
     p.add_argument("--drizzle", type=float, default=1.0, choices=[1.0, 1.5, 2.0],
                    help="integrate onto a finer grid")

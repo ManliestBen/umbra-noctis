@@ -9,7 +9,7 @@ from PIL import Image
 
 from umbra_noctis.cli import main
 from umbra_noctis.core.image import AstroImage
-from umbra_noctis.synth import make_star_field
+from umbra_noctis.synth import make_star_field, write_demo_session
 
 
 def test_demo_data_creates_dirs(tmp_path):
@@ -107,6 +107,31 @@ def test_library_rate_rejects_out_of_range(tmp_path, capsys):
     assert exc_info.value.code == 1
     err = capsys.readouterr().err
     assert "0-5" in err
+
+
+def test_stack_with_flats_flag(tmp_path, capsys):
+    light_dir, _ = write_demo_session(tmp_path, n_lights=4, n_darks=2)
+
+    flat_dir = tmp_path / "flats"
+    flat_dir.mkdir()
+    flat = AstroImage(data=np.full((540, 960), 0.5, dtype=np.float32))
+    for i in range(4):
+        flat.save_fits(flat_dir / f"flat{i:02d}.fits")
+
+    out = tmp_path / "stacked.fits"
+    capsys.readouterr()
+
+    main(["stack", str(light_dir), "-o", str(out), "--flats", str(flat_dir),
+          "--no-darks"])
+    out_text = capsys.readouterr().out
+    assert "master flat from 4 frames" in out_text
+    assert out.exists()
+
+    # AstroImage.history doesn't survive a FITS round-trip (only the FITS
+    # header's truncated HISTORY cards do), so check those directly.
+    from astropy.io import fits
+    history_cards = "\n".join(fits.getheader(out).get("HISTORY", []))
+    assert "apply_flat" in history_cards
 
 
 def test_grade_prints_verdict_table(tmp_path, capsys):

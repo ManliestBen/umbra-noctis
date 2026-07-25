@@ -60,6 +60,7 @@ Calibrate → register → integrate.
 | `-o, --output` | required | `.fits` recommended (keeps it linear for processing) |
 | `--darks DIR` | auto | Dark session folder; otherwise auto-matched by exposure+gain |
 | `--no-darks` | off | Skip the automatic dark search |
+| `--flats DIR` | none | Flat-field session folder (t-shirt/panel flats); builds a master flat |
 | `--sigma S` | 3.0 | Pixel rejection threshold (lower = more aggressive) |
 | `--best F` | 0.9 | Keep best fraction of frames by quality score |
 | `--keep-all` | off | Disable quality rejection entirely |
