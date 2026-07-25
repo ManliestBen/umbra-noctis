@@ -26,7 +26,7 @@ _NAME_RE = re.compile(
     r"^DWARF_(?P<kind>RAW|DARK|FLAT|BIAS|GOTO)"
     r"(?:_(?P<lens>TELE|WIDE))?"
     r"(?:_(?P<target>.+?))?"
-    r"_EXP_(?P<exp>[\d.]+)(?:s|ms)?"
+    r"_EXP_(?P<exp>[\d.]+)(?P<expunit>s|ms)?"
     r"_GAIN_(?P<gain>\d+)"
     r"_(?P<ts>\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}(?:-\d{1,6})?)$",
     re.IGNORECASE,
@@ -95,8 +95,9 @@ def _read_shots_info(folder: Path) -> dict:
         p = folder / candidate
         if p.exists():
             try:
-                return json.loads(p.read_text())
-            except (json.JSONDecodeError, OSError):
+                text = p.read_text(encoding="utf-8", errors="replace")
+                return json.loads(text)
+            except (json.JSONDecodeError, OSError, ValueError):
                 return {}
     return {}
 
@@ -150,8 +151,17 @@ def parse_session(folder: str | Path) -> DwarfSession:
                   "BIAS": "bias"}.get(kind, "unknown")
         s.lens = (m.group("lens") or "TELE").upper()
         s.target = (m.group("target") or "").replace("_", " ").strip()
-        s.exposure_s = float(m.group("exp"))
-        s.gain = int(m.group("gain"))
+        try:
+            exp = float(m.group("exp"))
+            if (m.group("expunit") or "s") == "ms":
+                exp /= 1000.0
+            s.exposure_s = exp
+        except ValueError:
+            s.parse_notes.append(f"unparseable exposure in folder name: {m.group('exp')!r}")
+        try:
+            s.gain = int(m.group("gain"))
+        except ValueError:
+            s.parse_notes.append(f"unparseable gain in folder name: {m.group('gain')!r}")
         s.timestamp = m.group("ts")
     else:
         s.parse_notes.append("folder name did not match Dwarf conventions")
