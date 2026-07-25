@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 
 from ..ingest.session import DwarfSession
@@ -50,6 +51,17 @@ CREATE INDEX IF NOT EXISTS idx_frames_session ON frames(session_id);
 """
 
 
+_CURRENT_VERSION = 1
+# Ordered (target_version, migrate_callable) pairs, applied in order to bring
+# an older database up to _CURRENT_VERSION. Future schema changes must NEVER
+# edit an existing table in _SCHEMA above — CREATE TABLE IF NOT EXISTS only
+# runs on a fresh (or already-up-to-date) database, so altering it in place
+# would silently no-op against every existing installed catalog. Instead:
+# write a migration function here, append it to _MIGRATIONS, and bump
+# _CURRENT_VERSION.
+_MIGRATIONS: list[tuple[int, Callable[[sqlite3.Connection], None]]] = []
+
+
 def default_db_path() -> Path:
     home = os.environ.get("UMBRA_HOME")
     base = Path(home) if home else Path.home() / ".umbra-noctis"
@@ -58,16 +70,19 @@ def default_db_path() -> Path:
 
 
 def _fingerprint(session: DwarfSession) -> str:
-    """Cheap content fingerprint: first light's first 64 KiB + frame count.
-    Detects re-imports of the same data from a different path."""
+    """Cheap content fingerprint: frame count, first/last light's size + first
+    64 KiB, and the session timestamp. Detects re-imports of the same data
+    from a different path."""
     h = hashlib.sha256()
     h.update(str(len(session.lights)).encode())
-    if session.lights:
+    for light in session.lights[:1] + session.lights[-1:]:
         try:
-            with open(session.lights[0], "rb") as f:
+            h.update(str(Path(light).stat().st_size).encode())
+            with open(light, "rb") as f:
                 h.update(f.read(65536))
         except OSError:
             pass
+    h.update(str(session.timestamp or "").encode())
     return h.hexdigest()[:24]
 
 
@@ -79,6 +94,15 @@ class Library:
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(_SCHEMA)
 
+        ver = self.conn.execute("PRAGMA user_version").fetchone()[0]
+        if ver < _CURRENT_VERSION:
+            for target, migrate in _MIGRATIONS:
+                if ver < target:
+                    migrate(self.conn)
+                    ver = target
+            self.conn.execute(f"PRAGMA user_version = {_CURRENT_VERSION}")
+            self.conn.commit()
+
     def close(self):
         self.conn.close()
 
@@ -86,14 +110,20 @@ class Library:
     def import_session(self, session: DwarfSession) -> tuple[int, bool]:
         """Add a session to the catalog. Returns ``(session_id, was_new)``.
 
-        Re-importing the same folder updates it in place; importing identical
-        data from a *different* folder is flagged as a duplicate (not added).
+        Re-importing the same folder updates it in place. Identical data
+        found under a *different* folder is no longer silently dropped —
+        it's cataloged as its own session (two folders, two rows); only an
+        unchanged re-import of the exact same path short-circuits here.
         """
         fp = _fingerprint(session)
         cur = self.conn.execute("SELECT id, path FROM sessions WHERE fingerprint = ?", (fp,))
         existing = cur.fetchone()
-        if existing and Path(existing["path"]) != session.path:
+        if existing and Path(existing["path"]) == session.path:
             return existing["id"], False
+
+        pre = self.conn.execute(
+            "SELECT id FROM sessions WHERE path = ?", (str(session.path),)
+        ).fetchone()
 
         info = resolve_target(session.target)
         cur = self.conn.execute(
@@ -120,7 +150,7 @@ class Library:
                 (sid, str(light), i),
             )
         self.conn.commit()
-        return sid, existing is None
+        return sid, pre is None
 
     # ------------------------------------------------------------- queries
     def sessions(self, target: str | None = None, kind: str | None = None) -> list[sqlite3.Row]:
