@@ -31,6 +31,7 @@ class TrailResult:
     n_frames: int
     n_skipped: int
     n_hot_pixels: int
+    mean_image: AstroImage | None = None   # mean of all frames: noise-free base
     log: list = field(default_factory=list)
 
 
@@ -57,6 +58,7 @@ def collect_frames(paths: list[str | Path]) -> list[Path]:
 
 def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
                 align: bool = False, cosmetic: bool = True,
+                fade: float = 0.0, fill_gaps: bool = True,
                 demosaic_method: str = "ea",
                 progress=None, log=None) -> TrailResult:
     """Lighten-blend ``paths`` into one composite.
@@ -69,6 +71,15 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
     - ``cosmetic``: when no dark is given, hot pixels are found statistically
       (bright in the per-pixel *minimum* of all frames — stars move, defects
       don't) and repaired in the result.
+    - ``fade``: comet-tail look — the accumulator decays by this fraction
+      before each new frame, so the newest trail end is brightest and the
+      tail dims into the past. 0.005–0.02 is the useful range; 0 disables.
+    - ``fill_gaps``: bridge the small dark dashes the intervalometer's
+      re-arm time leaves between consecutive exposures' trail segments
+      (grayscale morphological closing on the finished blend).
+
+    ``TrailResult.mean_image`` is the plain average of all frames — a
+    noise-reduced base to recover a clean landscape/foreground from.
     """
     logs: list[str] = []
 
@@ -83,9 +94,11 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
 
     max_acc: np.ndarray | None = None
     min_lum: np.ndarray | None = None
+    mean_acc: np.ndarray | None = None
     ref_img: AstroImage | None = None
     n_used = 0
     n_skipped = 0
+    fade = min(max(float(fade), 0.0), 0.5)
 
     for i, path in enumerate(paths):
         try:
@@ -116,9 +129,13 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
         if max_acc is None:
             max_acc = np.nan_to_num(data, nan=0.0).copy()
             min_lum = img.luminance().copy()
+            mean_acc = np.nan_to_num(data, nan=0.0).astype(np.float64)
         else:
+            if fade > 0.0:
+                max_acc *= (1.0 - fade)
             max_acc = np.fmax(max_acc, data)
             min_lum = np.fmin(min_lum, img.luminance())
+            mean_acc += np.nan_to_num(data, nan=0.0)
         n_used += 1
         if progress:
             progress("blend", i + 1, len(paths))
@@ -126,7 +143,20 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
     if ref_img is None or max_acc is None:
         raise ValueError("No readable frames in input")
 
-    result = ref_img.with_data(np.clip(np.nan_to_num(max_acc, nan=0.0), 0.0, 1.0))
+    blended = np.clip(np.nan_to_num(max_acc, nan=0.0), 0.0, 1.0)
+    if fill_gaps and n_used >= 2:
+        # The intervalometer's re-arm time leaves a 1–3 px dark dash between
+        # consecutive exposures' trail segments. A grayscale closing with a
+        # LINE kernel bridges gaps along the trail without thickening it;
+        # taking the max over four orientations handles any trail direction.
+        import cv2
+        kernels = [np.ones((1, 7), np.uint8), np.ones((7, 1), np.uint8),
+                   np.eye(7, dtype=np.uint8), np.fliplr(np.eye(7)).astype(np.uint8)]
+        closed = blended
+        for k in kernels:
+            closed = np.maximum(closed, cv2.morphologyEx(blended, cv2.MORPH_CLOSE, k))
+        blended = blended + 0.7 * (closed - blended)
+    result = ref_img.with_data(blended)
 
     n_hot = 0
     if cosmetic and master_dark is None and not align and n_used >= 3:
@@ -147,11 +177,16 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
             result.meta["total_integration_s"] = float(exp) * n_used
         except (TypeError, ValueError):
             pass
+    mean_image = ref_img.with_data(
+        np.clip((mean_acc / max(n_used, 1)).astype(np.float32), 0.0, 1.0))
+    mean_image.record("trail_mean", {"n_frames": n_used})
+
     result.record("trail_stack", {
         "n_frames": n_used, "n_skipped": n_skipped,
         "align": align, "dark": master_dark is not None,
+        "fade": fade, "fill_gaps": fill_gaps,
     })
     _log(f"Blended {n_used} frames" +
          (f", skipped {n_skipped}" if n_skipped else ""))
     return TrailResult(image=result, n_frames=n_used, n_skipped=n_skipped,
-                       n_hot_pixels=n_hot, log=logs)
+                       n_hot_pixels=n_hot, mean_image=mean_image, log=logs)

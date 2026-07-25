@@ -101,3 +101,43 @@ def dualband_extract(img: AstroImage, palette: str = "HOO", ha_boost: float = 1.
     else:  # OHH — inverted bicolor for variety
         out = np.stack([oiii, ha, ha], axis=-1)
     return img.with_data(np.clip(out, 0.0, 1.0).astype(np.float32))
+
+
+@register_op(
+    "defringe", "Defringe (chromatic aberration)", "cosmetic",
+    [Param("amount", "float", 0.8, 0.0, 1.0, "Fringe suppression strength"),
+     Param("hue", "choice", "purple", doc="Which fringe color to target",
+           choices=("purple", "green", "both"))],
+)
+def defringe(img: AstroImage, amount: float = 0.8,
+             hue: str = "purple") -> AstroImage:
+    """Suppress purple/green color fringes around bright stars and
+    high-contrast edges — the chromatic aberration every fast wide-angle
+    lens (e.g. an f/2.8 zoom shot wide open on star fields) produces.
+    Pixels whose color reads as fringe *and* sit near a bright gradient are
+    pulled toward the green channel; everything else is untouched, so real
+    star and nebula color survives."""
+    if not img.is_color or amount <= 0:
+        return img.copy()
+    import cv2
+    r, g, b = img.data[..., 0], img.data[..., 1], img.data[..., 2]
+    lum = img.luminance()
+    purple_excess = np.clip(np.minimum(r, b) - g, 0.0, None)
+    green_excess = np.clip(g - np.maximum(r, b), 0.0, None)
+    # Fringe lives NEXT TO bright neutral things (star cores). Seeds must be
+    # bright AND uncolored — otherwise a purple nebula would defringe itself.
+    thresh = max(float(np.percentile(lum, 99.0)), 0.2)
+    seeds = ((lum > thresh) & (purple_excess < 0.1) & (green_excess < 0.1))
+    near = cv2.dilate(seeds.astype(np.uint8),
+                      cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+    near = cv2.GaussianBlur(near.astype(np.float32), (9, 9), 0)
+
+    out = img.data.copy()
+    if hue in ("purple", "both"):
+        w = np.clip(purple_excess / 0.05, 0.0, 1.0) * near * amount
+        out[..., 0] = r - w * (r - g)
+        out[..., 2] = b - w * (b - g)
+    if hue in ("green", "both"):
+        w = np.clip(green_excess / 0.05, 0.0, 1.0) * near * amount
+        out[..., 1] = g - w * (g - np.maximum(r, b))
+    return img.with_data(np.clip(out, 0.0, 1.0))

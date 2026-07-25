@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Night Sky Field Card — Canon T1i + Tokina 11–16</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --ink-2: #646b78;
+    --paper: #ffffff;
+    --panel: #f4f5f8;
+    --accent: #2e3a59;
+    --accent-soft: #e6e9f1;
+    --alert: #a8332a;
+    --rule: #c9cdd6;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e8eaf0;
+      --ink-2: #9aa1b0;
+      --paper: #14161b;
+      --panel: #1d2029;
+      --accent: #93a3c8;
+      --accent-soft: #262c3d;
+      --alert: #e06a5a;
+      --rule: #363b47;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e8eaf0;
+    --ink-2: #9aa1b0;
+    --paper: #14161b;
+    --panel: #1d2029;
+    --accent: #93a3c8;
+    --accent-soft: #262c3d;
+    --alert: #e06a5a;
+    --rule: #363b47;
+  }
+  :root[data-theme="light"] {
+    --ink: #16181d;
+    --ink-2: #646b78;
+    --paper: #ffffff;
+    --panel: #f4f5f8;
+    --accent: #2e3a59;
+    --accent-soft: #e6e9f1;
+    --alert: #a8332a;
+    --rule: #c9cdd6;
+  }
+
+  html { background: var(--paper); }
+  body {
+    font-family: var(--sans);
+    color: var(--ink);
+    background: var(--paper);
+    font-size: 13px;
+    line-height: 1.45;
+    margin: 0;
+  }
+  .sheet {
+    max-width: 7.6in;
+    margin: 0 auto;
+    padding: 24px 20px 40px;
+  }
+  .page { break-after: page; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .gear {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-2);
+  }
+
+  /* ---------- scenario blocks ---------- */
+  section { margin-bottom: 14px; }
+  .scenario {
+    border: 1.5px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .scenario-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--accent);
+    color: var(--paper);
+    padding: 5px 12px;
+  }
+  :root[data-theme="dark"] .scenario-head,
+  .dark-head-fix { color: var(--paper); }
+  .scenario-head h2 {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0;
+  }
+  .scenario-head .aim {
+    font-size: 11px;
+    opacity: 0.85;
+  }
+  .settings {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--rule);
+  }
+  .set {
+    padding: 7px 12px 6px;
+    border-right: 1px solid var(--rule);
+  }
+  .set:nth-child(4n) { border-right: none; }
+  .set:nth-child(n+5) { border-top: 1px solid var(--rule); }
+  .set .k {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-2);
+    display: block;
+  }
+  .set .v {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 700;
+    display: block;
+    margin-top: 1px;
+  }
+  .set .sub {
+    font-size: 10px;
+    color: var(--ink-2);
+    display: block;
+  }
+  .scenario-notes {
+    padding: 7px 12px 9px;
+    display: grid;
+    gap: 3px;
+  }
+  .scenario-notes p { margin: 0; font-size: 11.5px; }
+  .warn {
+    color: var(--alert);
+    font-weight: 700;
+  }
+  .warn::before { content: "▲ "; font-size: 9px; }
+
+  /* ---------- page 2 ---------- */
+  h3 {
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    border-bottom: 1.5px solid var(--rule);
+    padding-bottom: 3px;
+    margin: 0 0 7px;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 600px) {
+    .two-col { grid-template-columns: 1fr; }
+    .settings { grid-template-columns: repeat(2, 1fr); }
+    .set:nth-child(2n) { border-right: none; }
+    .set:nth-child(n+3) { border-top: 1px solid var(--rule); }
+  }
+  ol.steps, ul.check {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 3px;
+    font-size: 11.5px;
+  }
+  ul.check { list-style: none; padding-left: 0; }
+  ul.check li::before {
+    content: "☐ ";
+    font-size: 12px;
+    color: var(--accent);
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--panel);
+    padding: 0 4px;
+    border-radius: 3px;
+  }
+  .prog {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 6px 10px;
+    margin: 4px 0 10px;
+  }
+  .prog b { color: var(--accent); }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  th {
+    text-align: left;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-2);
+    border-bottom: 1.5px solid var(--rule);
+    padding: 2px 8px 3px 0;
+  }
+  td {
+    padding: 2.5px 8px 2.5px 0;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--mono);
+  }
+  .small { font-size: 10.5px; color: var(--ink-2); }
+  .footer-note {
+    margin-top: 14px;
+    font-size: 10px;
+    color: var(--ink-2);
+    border-top: 1px solid var(--rule);
+    padding-top: 6px;
+  }
+  .print-hint {
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 11.5px;
+    margin-bottom: 16px;
+  }
+  .bortle-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .bortle {
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 10.5px;
+    color: var(--ink-2);
+  }
+  .bortle b {
+    font-family: var(--mono);
+    color: var(--ink);
+    display: block;
+    font-size: 11px;
+  }
+  .bortle.here { border-color: var(--accent); }
+  @media (max-width: 600px) { .bortle-strip { grid-template-columns: 1fr; } }
+
+  /* ---------- print ---------- */
+  @page { size: letter; margin: 0.45in; }
+  @media print {
+    :root {
+      --ink: #16181d; --ink-2: #565c68; --paper: #ffffff; --panel: #f2f3f6;
+      --accent: #2e3a59; --accent-soft: #e6e9f1; --alert: #a8332a; --rule: #b9bdc7;
+    }
+    body { font-size: 12px; }
+    .sheet { max-width: none; padding: 0; }
+    .print-hint { display: none; }
+    .scenario, .prog { break-inside: avoid; }
+    .scenario-head { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="print-hint">Print this page (Ctrl/Cmd-P, Letter, portrait, default margins) — it lands on exactly two pages. Colors are print-tuned automatically.</div>
+
+  <!-- ================= PAGE 1 ================= -->
+  <div class="page">
+    <header>
+      <h1>Night Sky Field Card</h1>
+      <span class="gear">Canon T1i (500D) · Tokina 11–16 f/2.8 · wired intervalometer</span>
+    </header>
+
+    <div class="bortle-strip">
+      <div class="bortle here"><b>DARK · Bortle 1–3</b>deep-woods New Hampshire — Milky Way casts shadows; skyglow is not the limit</div>
+      <div class="bortle here"><b>MID · Bortle 4–5</b>Lago Vista / Lake Travis (78645) — decent sky, Austin glow on the SE horizon</div>
+      <div class="bortle"><b>BRIGHT · Bortle 6–7</b>suburbs — trails still work; meteors only the fireballs</div>
+    </div>
+
+    <section>
+      <div class="scenario">
+        <div class="scenario-head">
+          <h2>1 · Meteor Showers</h2>
+          <span class="aim">Goal: shutter open all night, zero gaps</span>
+        </div>
+        <div class="settings">
+          <div class="set"><span class="k">Mode</span><span class="v">M</span></div>
+          <div class="set"><span class="k">Focal</span><span class="v">11mm</span><span class="sub">widest = most sky</span></div>
+          <div class="set"><span class="k">Aperture</span><span class="v">f/2.8</span><span class="sub">wide open — no exceptions</span></div>
+          <div class="set"><span class="k">Shutter</span><span class="v">25″</span><span class="sub">B6–7: 15″</span></div>
+          <div class="set"><span class="k">ISO</span><span class="v">1600</span><span class="sub">B1–3: 3200 · B6–7: 800</span></div>
+          <div class="set"><span class="k">WB</span><span class="v">4000K</span><span class="sub">never Auto</span></div>
+          <div class="set"><span class="k">Quality</span><span class="v">RAW</span></div>
+          <div class="set"><span class="k">LENR</span><span class="v">OFF</span><span class="sub">C.Fn II-1: 0</span></div>
+        </div>
+        <div class="scenario-notes">
+          <p><b>Intervalometer:</b> <code>DELAY 0 · LONG — · INTVL 27s · N 00 (∞)</code> — camera times the 25″ exposure; the 27s interval leaves a ~2s re-arm gap.</p>
+          <p><b>Aim</b> 40–60° away from the radiant (meteors are longest there); put the radiant near a frame corner and keep some horizon for scale.</p>
+          <p class="warn">LENR ON would blank the sensor half the night — you'd miss half the meteors.</p>
+          <p class="small">8 GB card ≈ 350 RAW ≈ 2.5 h. Battery in cold ≈ 2 h — swap during a gap, don't rebreak focus.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="scenario">
+        <div class="scenario-head">
+          <h2>2 · Star Trails — One Continuous Exposure</h2>
+          <span class="aim">Goal: one frame, one shot at it</span>
+        </div>
+        <div class="settings">
+          <div class="set"><span class="k">Mode</span><span class="v">M → BULB</span><span class="sub">scroll shutter past 30″</span></div>
+          <div class="set"><span class="k">Focal</span><span class="v">11mm</span><span class="sub">Polaris in frame = circles</span></div>
+          <div class="set"><span class="k">Aperture</span><span class="v">f/4</span><span class="sub">B6–7: f/5.6</span></div>
+          <div class="set"><span class="k">Shutter</span><span class="v">10–20min</span><span class="sub">B1–3: 30–60min · B6–7: 5–10</span></div>
+          <div class="set"><span class="k">ISO</span><span class="v">100</span><span class="sub">all zones</span></div>
+          <div class="set"><span class="k">WB</span><span class="v">4000K</span></div>
+          <div class="set"><span class="k">Quality</span><span class="v">RAW</span></div>
+          <div class="set"><span class="k">LENR</span><span class="v">ON</span><span class="sub">kills hot pixels / amp glow</span></div>
+        </div>
+        <div class="scenario-notes">
+          <p><b>Intervalometer:</b> <code>DELAY 0 · LONG 30:00 · INTVL — · N 1</code> (bulb mode on the remote).</p>
+          <p><b>Test first:</b> ISO 3200 · f/2.8 · 30″. If that test looks right → same brightness at ISO 100 is <b>16 min @ f/2.8</b> or <b>32 min @ f/4</b>.</p>
+          <p class="warn">LENR doubles the wait: a 30-min exposure locks the camera for 30 more. Fresh battery mandatory — if it dies mid-frame the whole night is gone.</p>
+          <p class="small">This is the fragile method. One plane, one dew droplet, one dead battery ruins it — method 3 is safer.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="scenario">
+        <div class="scenario-head">
+          <h2>3 · Star Trails — Stacked Afterwards</h2>
+          <span class="aim">Goal: hundreds of identical frames, tiny gaps</span>
+        </div>
+        <div class="settings">
+          <div class="set"><span class="k">Mode</span><span class="v">M</span></div>
+          <div class="set"><span class="k">Focal</span><span class="v">11mm</span><span class="sub">Polaris in frame = circles</span></div>
+          <div class="set"><span class="k">Aperture</span><span class="v">f/2.8</span><span class="sub">B6–7: f/4</span></div>
+          <div class="set"><span class="k">Shutter</span><span class="v">30″</span><span class="sub">all zones</span></div>
+          <div class="set"><span class="k">ISO</span><span class="v">400</span><span class="sub">B1–3: 800 · B6–7: 200</span></div>
+          <div class="set"><span class="k">WB</span><span class="v">4000K</span><span class="sub">fixed, or frames flicker</span></div>
+          <div class="set"><span class="k">Quality</span><span class="v">RAW</span></div>
+          <div class="set"><span class="k">LENR</span><span class="v">OFF</span><span class="sub">non-negotiable</span></div>
+        </div>
+        <div class="scenario-notes">
+          <p><b>Intervalometer:</b> <code>DELAY 0 · LONG — · INTVL 32s · N 00 (∞)</code> — run 1–3 h → 120–360 frames. Gap must stay ≤2s or trails print dashed.</p>
+          <p><b>Before packing up:</b> cap the lens, shoot 8–10 frames at identical settings — dark frames for the stacker.</p>
+          <p class="warn">LENR ON inserts a 30″ blackout after every frame = dotted-line trails. Check it's off before the first frame.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= PAGE 2 ================= -->
+  <div>
+    <header>
+      <h1>Setup &amp; Reference</h1>
+      <span class="gear">once-per-night checklist · focus · math</span>
+    </header>
+
+    <div class="two-col">
+      <section>
+        <h3>Once Per Night — Camera Prep</h3>
+        <ul class="check">
+          <li>Fresh battery in, spares in a warm pocket (cold halves LP-E5 life)</li>
+          <li>Card formatted in camera</li>
+          <li>Quality: RAW · Picture Style irrelevant to RAW</li>
+          <li>WB: K → 4000 (never Auto — it drifts frame to frame)</li>
+          <li>C.Fn II-1 Long-exposure NR: per scenario above</li>
+          <li>C.Fn II-2 High ISO NR: 0 (Off)</li>
+          <li>Auto power off: <b>Off</b> · Review time: <b>Off</b></li>
+          <li>LCD brightness: minimum (preserves night vision)</li>
+          <li>Remove any UV/protection filter (star flares, dew rings)</li>
+          <li>Lens hood on; hand-warmer rubber-banded to barrel if humid</li>
+          <li>Tripod locked, strap removed or wrapped (wind shake)</li>
+          <li>Intervalometer plugged into the 2.5mm remote port (left side)</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3>Focus — Do This Every Time</h3>
+        <ol class="steps">
+          <li>Pull the Tokina focus ring <b>back toward the camera</b> — that's its manual-focus clutch. Set roughly on the ∞ mark.</li>
+          <li>Press the Live View button; aim at the brightest star or planet.</li>
+          <li>Zoom to 10× with the magnify button.</li>
+          <li>Rock the ring until the star is the <b>smallest possible point</b> — the Tokina focuses <i>past</i> infinity, so never trust the hard stop.</li>
+          <li>Tape the ring. Recheck after ~1 h (glass shifts as it cools).</li>
+        </ol>
+
+        <h3 style="margin-top:14px;">Trail-Free Shutter Limit (1.6× crop)</h3>
+        <table>
+          <tr><th>Focal</th><th>Stars stay points below</th><th>Use</th></tr>
+          <tr><td>11mm</td><td>≈28″ (500 rule)</td><td>25″</td></tr>
+          <tr><td>16mm</td><td>≈20″</td><td>15–20″</td></tr>
+        </table>
+      </section>
+
+      <section>
+        <h3>Exposure Trades — Same Brightness</h3>
+        <table>
+          <tr><th>Change</th><th>Compensate with</th></tr>
+          <tr><td>ISO ÷2 (1600→800)</td><td>2× shutter or open 1 stop</td></tr>
+          <tr><td>f/2.8 → f/4</td><td>2× shutter or 2× ISO</td></tr>
+          <tr><td>f/2.8 → f/5.6</td><td>4× shutter or 4× ISO</td></tr>
+        </table>
+        <p class="small" style="margin:6px 0 0;">Histogram target for sky frames: main hump ¼–⅓ from the left edge. Hugging the left = lift ISO; past halfway = skyglow is winning, shorten or stop down.</p>
+      </section>
+
+      <section>
+        <h3>Afterwards — Umbra Noctis</h3>
+        <p style="font-size:11.5px; margin:0 0 4px;">Copy the night into one folder, darks in a subfolder. CR2 files load directly (one-time setup: <code>pip install 'umbra-noctis[dslr]'</code>).</p>
+        <p style="font-size:11.5px; margin:0 0 2px;"><b>Star trails</b> (lighten blend, gaps auto-bridged, hot pixels auto-repaired; add <code>--fade 0.01</code> for comet tails, <code>--foreground base.tif</code> for a noise-free landscape):</p>
+        <div class="prog">umbra trails ./night -o trails.jpg --darks ./darks</div>
+        <p style="font-size:11.5px; margin:0 0 2px;"><b>Meteor nights</b> — the scanner culls hundreds of frames to the few with streaks (satellites auto-rejected), then <code>--align</code> composites every meteor onto one fixed sky:</p>
+        <div class="prog">umbra meteor-scan ./night --copy-to keepers/<br>umbra trails ./keepers -o meteors.tif --align</div>
+        <p class="small" style="margin:0;">Never run plain <code>umbra stack</code> on trail frames — it aligns the stars, which erases the trails. Full manual: <code>umbra guide</code>.</p>
+      </section>
+    </div>
+
+    <div class="footer-note">
+      Canon T1i · Tokina AT-X 116 Pro DX 11–16mm f/2.8 · printed 2026 · shutter counts assume 20–25 MB RAW files
+    </div>
+  </div>
+</div>
+</body>
+</html>

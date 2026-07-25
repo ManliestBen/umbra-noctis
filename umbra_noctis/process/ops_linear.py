@@ -288,3 +288,22 @@ def banding_reduce(img: AstroImage, axis: str = "rows", protect: float = 0.9) ->
             correction = line_bg - np.median(line_bg)
             plane -= correction[:, None] if ax == 0 else correction[None, :]
     return img.with_data(np.clip(data, 0.0, 1.0))
+
+
+@register_op(
+    "vignette_correct", "Vignetting correction", "linear",
+    [Param("strength", "float", 1.0, 0.0, 1.0, "0 = off, 1 = full correction"),
+     Param("box", "int", 64, 16, 256, "Sampling box size in pixels")],
+)
+def vignette_correct(img: AstroImage, strength: float = 1.0,
+                     box: int = 64) -> AstroImage:
+    """Remove radial lens vignetting (dark corners) by fitting a smooth 2-D
+    illumination surface to the image's own star-free background and dividing
+    it out — a synthetic flat. Made for wide-angle DSLR nightscapes and
+    Dwarf 3 frames when no real flats exist. Run before stretching."""
+    from ..calib.masters import synthetic_flat
+    if strength <= 0:
+        return img.copy()
+    flat = synthetic_flat(img, box=box).data
+    norm = (1.0 - strength) + strength * flat
+    return img.with_data(np.clip(img.data / np.clip(norm, 0.2, 5.0), 0.0, 1.0))

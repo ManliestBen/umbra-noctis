@@ -339,13 +339,17 @@ The Dwarf 3 produces data with specific characteristics that drive many features
   lighten blend with dark subtraction, statistical hot-pixel repair, and an `--align`
   meteor-composite mode. Reads DSLR frames — Canon CR2/CR3, NEF, ARW, DNG via the
   `dslr` extra — plus JPEG/TIFF/PNG/FITS, so the whole suite now ingests DSLR files
-  through `AstroImage.from_file`. Gap filling and trail fading still open.)*
+  through `AstroImage.from_file`. Directional gap filling and comet-tail `--fade`
+  shipped too, plus `--foreground` mean extraction for nightscape bases.)*
 - **P2 — Nightscape processing:** sky/foreground segmentation masks so the sky can be
   stacked (noise reduction) while the landscape stays static; separate white balance
   for sky vs. ground.
 - **P2 — Meteor & transient hunting:** scan timelapse/wide frames for transient trails,
   distinguish meteors from satellites/planes by trail profile, and build meteor-shower
-  composites onto a single base frame.
+  composites onto a single base frame. *(Shipped as `umbra meteor-scan`:
+  neighbor-maximum residual + Hough streak extraction, satellite rejection by
+  cross-frame colinear tracks, `--copy-to`/`--annotate`/`--json`; composites via
+  `umbra trails --align`.)*
 - **P3 — Panorama stitching** of wide-cam frames (Milky Way arches).
 - **P3 — All-night sky movie:** wide-cam timelapse with the telephoto's live stack
   progress as picture-in-picture — a shareable "how the night went" reel.

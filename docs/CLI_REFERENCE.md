@@ -119,11 +119,46 @@ of ~3 frames.
 | `--darks DIR` | Cap-on dark frames (same settings) → master dark subtraction |
 | `--align` | Register the star field to the first frame before blending — use for **meteor-shower composites** (stars stay put, meteors accumulate); leave off for star trails |
 | `--no-cosmetic` | Skip statistical hot-pixel repair (on by default when no darks are given) |
+| `--fade F` | Comet-tail look: the trail's past dims by `F` per frame (try 0.005–0.02) |
+| `--no-gap-fill` | Don't bridge the small dark dashes the intervalometer re-arm gap leaves in trails (bridging is on by default, directional so trails aren't thickened) |
+| `--foreground P` | Also write the mean of all frames to `P` — a noise-free landscape/base image |
 
 ```bash
 umbra trails ./canon_night -o trails.jpg --darks ./canon_darks
+umbra trails ./canon_night -o comet.jpg --fade 0.01 --foreground base.tif
 umbra trails ./perseids/*.CR2 -o meteors.tif --align
 ```
+
+## `umbra meteor-scan <frames...> [options]`
+
+Quick-scan a whole night and flag the frames that contain meteor streaks.
+Each frame's luminance is compared against the maximum of its two neighbors
+(static stars, hot pixels, and skyglow cancel; slow star drift is covered),
+the residual is thresholded robustly, and streaks are found with a Hough
+transform. Streaks continuing along the same line in adjacent frames are
+reclassified `satellite` — meteors live inside a single exposure. Streams at
+reduced resolution: hundreds of raw frames scan in a couple of minutes.
+
+| Option | Meaning |
+|---|---|
+| `--min-length N` | Shortest streak worth reporting, full-res pixels (default 40) |
+| `--sigma K` | Detection threshold above noise (default 6; lower = more sensitive) |
+| `--copy-to DIR` | Copy meteor frames into `DIR` (ready for `umbra trails --align`) |
+| `--annotate DIR` | Write JPEG previews with each streak outlined for a quick human veto |
+| `--json FILE` | Full machine-readable report |
+
+```bash
+umbra meteor-scan ./perseids --copy-to keepers/ --annotate previews/
+umbra trails ./keepers -o meteors.tif --align
+```
+
+## `umbra guide [topic]`
+
+The built-in manual. No argument lists the topics (getting started, deep-sky
+workflow, star trails & meteors, processing, generated op reference, recipes,
+GUI, FAQ); `umbra guide all` prints everything. The same guide is in the
+desktop app under Help → Guide. A printable field-settings card for DSLR
+nights lives at [docs/FIELD_CARD.html](FIELD_CARD.html).
 
 ## `umbra gui`
 

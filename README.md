@@ -26,8 +26,15 @@ so any result can be reproduced.
 - **Planetary** — lucky-imaging stacks from Dwarf video captures.
 - **Star trails & meteor composites** — lighten-blend stacking of DSLR
   nights (`umbra trails`): Canon CR2/CR3 and other camera raws, JPEG, TIFF,
-  and FITS, with dark subtraction, hot-pixel repair, and an `--align` mode
-  that registers the star field for meteor-shower composites.
+  and FITS, with dark subtraction, hot-pixel repair, gap bridging,
+  comet-tail fading, noise-free foreground extraction, and an `--align`
+  mode that registers the star field for meteor-shower composites.
+- **Meteor quick-scan** — `umbra meteor-scan` flags the frames in a night
+  that contain streaks and rejects satellites/aircraft by their multi-frame
+  tracks; `--copy-to` hands the keepers straight to the compositor.
+- **Built-in guide** — `umbra guide` (and Help → Guide in the app) explains
+  every feature offline, including a live-generated operation reference; a
+  printable field-settings card ships in `docs/FIELD_CARD.html`.
 - **Plate solving & annotation** — via ASTAP, astrometry.net, or the free
   nova.astrometry.net web API.
 - **Recipes & automation** — save any processing chain as JSON, replay it on

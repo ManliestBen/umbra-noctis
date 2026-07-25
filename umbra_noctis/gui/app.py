@@ -10,9 +10,10 @@ import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QHBoxLayout, QLabel,
-                               QMainWindow, QMessageBox, QPushButton,
-                               QStackedWidget, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog,
+                               QHBoxLayout, QLabel, QListWidget, QMainWindow,
+                               QMessageBox, QPushButton, QStackedWidget,
+                               QTextBrowser, QVBoxLayout, QWidget)
 
 from .. import __app_name__, __version__
 from .pages_data import GradePage, LibraryPage
@@ -134,16 +135,42 @@ class MainWindow(QMainWindow):
         m_help = self.menuBar().addMenu("&Help")
         about = QAction("&About", self)
         about.triggered.connect(self._about)
+        guide = QAction("&Guide", self)
+        guide.setShortcut(QKeySequence.HelpContents)
+        guide.triggered.connect(self._show_guide)
         docs = QAction("Where are the docs?", self)
         docs.triggered.connect(lambda: QMessageBox.information(
             self, "Documentation",
-            "Full guides live in the docs/ folder of the repository:\n\n"
+            "The full guide is built in: Help → Guide (or `umbra guide` "
+            "in a terminal).\n\nThe repository also ships\n"
             "USER_GUIDE.md — every feature explained\n"
             "PROCESSING_TUTORIAL.md — step-by-step walkthrough\n"
             "GUI_TOUR.md — this app, screen by screen\n\n"
             "https://github.com/ManliestBen/umbra-noctis"))
+        m_help.addAction(guide)
         m_help.addAction(docs)
         m_help.addAction(about)
+
+    def _show_guide(self):
+        from ..guide import render, topics
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Umbra Noctis — Guide")
+        dlg.resize(880, 640)
+        layout = QHBoxLayout(dlg)
+        topic_list = QListWidget()
+        topic_list.setMaximumWidth(240)
+        viewer = QTextBrowser()
+        viewer.setOpenExternalLinks(True)
+        keys = []
+        for key, title in topics():
+            keys.append(key)
+            topic_list.addItem(title)
+        topic_list.currentRowChanged.connect(
+            lambda row: viewer.setMarkdown(render(keys[row])) if row >= 0 else None)
+        topic_list.setCurrentRow(0)
+        layout.addWidget(topic_list)
+        layout.addWidget(viewer, stretch=1)
+        dlg.exec()
 
     def _about(self):
         QMessageBox.about(

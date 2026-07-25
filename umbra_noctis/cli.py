@@ -271,7 +271,8 @@ def cmd_trails(args):
 
     result = trail_stack(
         frames, master_dark=master_dark, align=args.align,
-        cosmetic=not args.no_cosmetic,
+        cosmetic=not args.no_cosmetic, fade=args.fade,
+        fill_gaps=not args.no_gap_fill,
         progress=_progress_printer, log=lambda m: print("  " + m))
 
     out = Path(args.output)
@@ -279,8 +280,82 @@ def cmd_trails(args):
         result.image.save_fits(out)
     else:
         export_image(result.image, out)
+    if args.foreground and result.mean_image is not None:
+        fg = Path(args.foreground)
+        if fg.suffix.lower() in (".fits", ".fit"):
+            result.mean_image.save_fits(fg)
+        else:
+            export_image(result.mean_image, fg)
+        print(f"  noise-free foreground (mean of all frames) -> {fg}")
     print(f"\nBlended {result.n_frames} frames "
           f"({result.n_skipped} skipped) -> {out}")
+
+
+def cmd_meteor_scan(args):
+    import shutil
+    from .detect import scan_for_meteors
+    from .detect.meteors import annotate_scan
+    from .stack.trails import collect_frames
+
+    frames = collect_frames(args.frames)
+    if len(frames) < 3:
+        print("Need at least 3 frames (streaks are found by comparing neighbors).")
+        sys.exit(1)
+    print(f"Scanning {len(frames)} frames for meteors ...")
+    results = scan_for_meteors(frames, min_length=args.min_length,
+                               k_sigma=args.sigma,
+                               progress=_progress_printer,
+                               log=lambda m: print("  " + m))
+
+    hits = [r for r in results if r.verdict != "clean"]
+    if hits:
+        print(f"\n{'frame':<28} {'verdict':<10} {'streaks':>7} "
+              f"{'longest':>9} {'angle':>7}")
+        for r in hits:
+            s = r.longest
+            print(f"{r.path.name:<28} {r.verdict:<10} {len(r.streaks):>7} "
+                  f"{s.length:>7.0f}px {s.angle_deg:>6.1f}°")
+    meteors = [r for r in results if r.verdict == "meteor"]
+    print(f"\n{len(meteors)} meteor candidate(s). "
+          + ("Composite them with: umbra trails <frames> -o out.tif --align"
+             if meteors else "Clear skies next time."))
+
+    if args.copy_to and meteors:
+        dest = Path(args.copy_to)
+        dest.mkdir(parents=True, exist_ok=True)
+        for r in meteors:
+            shutil.copy2(r.path, dest / r.path.name)
+        print(f"Copied {len(meteors)} frames -> {dest}")
+    if args.annotate and hits:
+        dest = Path(args.annotate)
+        dest.mkdir(parents=True, exist_ok=True)
+        for r in hits:
+            annotate_scan(r, dest / (r.path.stem + "_streaks.jpg"))
+        print(f"Annotated previews -> {dest}")
+    if args.json:
+        report = [{
+            "path": str(r.path), "verdict": r.verdict,
+            "streaks": [{"x0": s.x0, "y0": s.y0, "x1": s.x1, "y1": s.y1,
+                         "length": s.length, "angle_deg": s.angle_deg,
+                         "brightness": s.brightness} for s in r.streaks],
+        } for r in results]
+        Path(args.json).write_text(json.dumps(report, indent=2))
+        print(f"Report written to {args.json}")
+
+
+def cmd_guide(args):
+    from .guide import render, topics
+    if not args.topic:
+        print("The built-in guide. Read a topic with: umbra guide <topic>\n")
+        for key, title in topics():
+            print(f"  {key:<12} {title}")
+        print(f"  {'all':<12} everything above in one page")
+        return
+    try:
+        print(render(args.topic))
+    except KeyError as exc:
+        print(exc.args[0])
+        sys.exit(1)
 
 
 def cmd_gui(args):
@@ -388,7 +463,36 @@ def main(argv=None):
                         "leave off for star trails)")
     p.add_argument("--no-cosmetic", action="store_true",
                    help="skip statistical hot-pixel repair")
+    p.add_argument("--fade", type=float, default=0.0,
+                   help="comet-tail fade: older trail ends dim by this "
+                        "fraction per frame (try 0.005-0.02; 0 = classic)")
+    p.add_argument("--no-gap-fill", action="store_true",
+                   help="don't bridge the small inter-exposure trail gaps")
+    p.add_argument("--foreground",
+                   help="also write the mean of all frames here — a "
+                        "noise-free landscape/base image")
     p.set_defaults(func=cmd_trails)
+
+    p = sub.add_parser(
+        "meteor-scan",
+        help="scan a night of frames and flag ones containing meteors")
+    p.add_argument("frames", nargs="+",
+                   help="folder(s) of frames or files, in shooting order")
+    p.add_argument("--min-length", type=float, default=40.0,
+                   help="shortest streak to report, full-res pixels")
+    p.add_argument("--sigma", type=float, default=6.0,
+                   help="detection threshold above noise (lower = more "
+                        "sensitive, more false positives)")
+    p.add_argument("--copy-to", help="copy meteor frames into this folder")
+    p.add_argument("--annotate",
+                   help="write JPEG previews with streaks outlined here")
+    p.add_argument("--json", help="write the full report as JSON")
+    p.set_defaults(func=cmd_meteor_scan)
+
+    p = sub.add_parser("guide", help="the built-in guide to every feature")
+    p.add_argument("topic", nargs="?",
+                   help="topic key (omit to list topics; 'all' for everything)")
+    p.set_defaults(func=cmd_guide)
 
     p = sub.add_parser("gui", help="launch the desktop application")
     p.set_defaults(func=cmd_gui)
