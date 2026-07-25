@@ -132,13 +132,14 @@ def cmd_stack(args):
             master_dark = build_master(found.lights)
             print(f"  master dark auto-found: {found.path.name}")
 
+    out = Path(args.output)
     result = integrate(
         s.lights, master_dark=master_dark,
         rejection_sigma=args.sigma, drizzle=args.drizzle,
         best_fraction=args.best, quality_filter=not args.keep_all,
+        work_dir=out.parent,
         progress=_progress_printer, log=lambda m: print("  " + m))
 
-    out = Path(args.output)
     if out.suffix.lower() in (".fits", ".fit"):
         result.image.save_fits(out)
     else:

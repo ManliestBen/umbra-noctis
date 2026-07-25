@@ -15,6 +15,7 @@ Memory strategy: registered frames are streamed into per-strip stacks so an
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -88,6 +89,7 @@ def integrate(
     drizzle: float = 1.0,
     strip_rows: int = 128,
     qualities: list[FrameQuality] | None = None,
+    work_dir: str | Path | None = None,
     progress=None,
     log=None,
 ) -> StackResult:
@@ -97,7 +99,10 @@ def integrate(
     ``progress(stage, done, total)`` and ``log(str)`` are optional callbacks.
     ``qualities``, if given, must be the same length and order as
     ``light_paths`` (e.g. already computed by a Grade step) — supplying it
-    skips re-grading every frame from scratch.
+    skips re-grading every frame from scratch. ``work_dir`` picks where the
+    disk-backed integration cube's temp directory is created (default: the
+    platform temp dir, which is often tmpfs/RAM-backed — pass a path on a
+    real disk with enough free space for large sessions).
     """
     logs: list[str] = []
 
@@ -227,64 +232,84 @@ def integrate(
     # warp straight into the disk-backed memmap, then drop it. At no point
     # does this loop hold more than the reference frame plus the one frame
     # currently being processed.
-    tmpdir = tempfile.TemporaryDirectory(prefix="umbra_stack_")
+    #
+    # The temp dir (and therefore the memmap) defaults to the platform temp
+    # location, which is frequently tmpfs (i.e. RAM) — pass work_dir= to put
+    # it on a real disk for large sessions. The `with` block guarantees the
+    # directory is removed on every exit path, success or exception; the
+    # inner try/finally releases the memmap first so nothing holds the
+    # backing file open when the directory is removed.
     shape = (n, out_h, out_w, 3) if is_color else (n, out_h, out_w)
-    cube = np.memmap(Path(tmpdir.name) / "cube.dat", dtype=np.float32,
-                     mode="w+", shape=shape)
-    transforms: list[Transform] = []
-    for i, path in enumerate(kept_paths):
-        if i == ref_local:
-            img, t = ref_img, Transform.identity()
-        else:
-            img = _load_calibrated(path)
-            t = solve_transform(img, ref_img)
-        transforms.append(t)
-        _prog("register", i + 1, n)
+    cube_bytes = int(np.prod(shape)) * np.dtype(np.float32).itemsize
+    if work_dir is not None:
+        Path(work_dir).mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="umbra_stack_",
+                                     dir=str(work_dir) if work_dir else None) as tmpdir_name:
+        free = shutil.disk_usage(tmpdir_name).free
+        if free < cube_bytes * 1.1:
+            raise RuntimeError(
+                f"Not enough free disk space to stack {n} frames at "
+                f"{out_h}x{out_w}: need ~{cube_bytes / 1e9:.2f} GB (10% headroom "
+                f"included) in {tmpdir_name}, only {free / 1e9:.2f} GB free. "
+                f"Pass work_dir= to point integrate() at a drive with more room.")
 
-        data = img.data
-        if normalize and i != ref_local:
-            data = _normalize_to_ref(data, ref_median, ref_scale)
-        cube[i] = warp(data, t, order=1, output_shape=(out_h, out_w),
-                       upscale=drizzle)
-        _prog("integrate", i + 1, n + 1)
-        del img, data
+        cube = np.memmap(Path(tmpdir_name) / "cube.dat", dtype=np.float32,
+                         mode="w+", shape=shape)
+        try:
+            transforms: list[Transform] = []
+            for i, path in enumerate(kept_paths):
+                if i == ref_local:
+                    img, t = ref_img, Transform.identity()
+                else:
+                    img = _load_calibrated(path)
+                    t = solve_transform(img, ref_img)
+                transforms.append(t)
+                _prog("register", i + 1, n)
 
-    solved = [t for t in transforms if t.method != "identity"]
-    if solved:
-        rot_span = max(abs(t.rotation_deg) for t in solved)
-        _log(f"Registration: {sum(1 for t in solved if t.method == 'stars')} star-solved, "
-             f"{sum(1 for t in solved if t.method == 'phase')} phase-only; "
-             f"max field rotation {rot_span:.2f} deg")
+                data = img.data
+                if normalize and i != ref_local:
+                    data = _normalize_to_ref(data, ref_median, ref_scale)
+                cube[i] = warp(data, t, order=1, output_shape=(out_h, out_w),
+                               upscale=drizzle)
+                _prog("integrate", i + 1, n + 1)
+                del img, data
 
-    result = np.zeros(shape[1:], dtype=np.float32)
-    rejected_px = 0
-    total_px = 0
-    w_col = weights.reshape(-1, *([1] * (len(shape) - 1)))
-    for y0 in range(0, out_h, strip_rows):
-        y1 = min(y0 + strip_rows, out_h)
-        strip = np.asarray(cube[:, y0:y1])          # (n, rows, w[, 3])
-        valid = np.isfinite(strip)
-        med = np.nanmedian(strip, axis=0)
-        # Robust sigma via MAD: a plain std is inflated by the very outliers
-        # (satellite trails) we are trying to reject, hiding them at ~3.0 dev.
-        std = 1.4826 * np.nanmedian(np.abs(strip - med[None]), axis=0) + 1e-5
-        dev = np.abs(strip - med[None]) / std[None]
-        keep = valid & (dev < rejection_sigma)
-        # Winsorize: clamp rejected-but-valid samples to the clip boundary
-        lo = med[None] - rejection_sigma * std[None]
-        hi = med[None] + rejection_sigma * std[None]
-        wins = np.clip(np.where(valid, strip, med[None]), lo, hi)
-        wmask = np.where(valid, w_col, 0.0).astype(np.float32)
-        # full weight where kept, quarter weight where winsorized
-        wmask = np.where(keep, wmask, wmask * 0.25)
-        denom = wmask.sum(axis=0)
-        result[y0:y1] = np.where(denom > 0, (wins * wmask).sum(axis=0) / np.maximum(denom, 1e-9),
-                                 med)
-        rejected_px += int((valid & ~keep).sum())
-        total_px += int(valid.sum())
-    _prog("integrate", n + 1, n + 1)
-    del cube
-    tmpdir.cleanup()
+            solved = [t for t in transforms if t.method != "identity"]
+            if solved:
+                rot_span = max(abs(t.rotation_deg) for t in solved)
+                _log(f"Registration: {sum(1 for t in solved if t.method == 'stars')} "
+                     f"star-solved, {sum(1 for t in solved if t.method == 'phase')} "
+                     f"phase-only; max field rotation {rot_span:.2f} deg")
+
+            result = np.zeros(shape[1:], dtype=np.float32)
+            rejected_px = 0
+            total_px = 0
+            w_col = weights.reshape(-1, *([1] * (len(shape) - 1)))
+            for y0 in range(0, out_h, strip_rows):
+                y1 = min(y0 + strip_rows, out_h)
+                strip = np.asarray(cube[:, y0:y1])          # (n, rows, w[, 3])
+                valid = np.isfinite(strip)
+                med = np.nanmedian(strip, axis=0)
+                # Robust sigma via MAD: a plain std is inflated by the very outliers
+                # (satellite trails) we are trying to reject, hiding them at ~3.0 dev.
+                std = 1.4826 * np.nanmedian(np.abs(strip - med[None]), axis=0) + 1e-5
+                dev = np.abs(strip - med[None]) / std[None]
+                keep = valid & (dev < rejection_sigma)
+                # Winsorize: clamp rejected-but-valid samples to the clip boundary
+                lo = med[None] - rejection_sigma * std[None]
+                hi = med[None] + rejection_sigma * std[None]
+                wins = np.clip(np.where(valid, strip, med[None]), lo, hi)
+                wmask = np.where(valid, w_col, 0.0).astype(np.float32)
+                # full weight where kept, quarter weight where winsorized
+                wmask = np.where(keep, wmask, wmask * 0.25)
+                denom = wmask.sum(axis=0)
+                result[y0:y1] = np.where(
+                    denom > 0, (wins * wmask).sum(axis=0) / np.maximum(denom, 1e-9), med)
+                rejected_px += int((valid & ~keep).sum())
+                total_px += int(valid.sum())
+            _prog("integrate", n + 1, n + 1)
+        finally:
+            del cube
 
     stacked = ref_img.with_data(np.clip(np.nan_to_num(result, nan=0.0), 0.0, 1.0))
     stacked.meta["n_stacked"] = n
