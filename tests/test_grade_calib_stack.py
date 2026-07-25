@@ -102,6 +102,11 @@ def test_synthetic_flat_flattens_vignette():
     assert abs(corner - center) / center < 0.08  # within 8% after correction
 
 
+def test_sep_backend_available():
+    from umbra_noctis.grade import stars
+    assert stars._HAVE_SEP, "sep must be installed — star detection quality depends on it"
+
+
 @pytest.mark.slow
 def test_end_to_end_integration_improves_snr(tmp_path):
     light_dir, dark_dir = write_demo_session(tmp_path, n_lights=10, n_darks=6)

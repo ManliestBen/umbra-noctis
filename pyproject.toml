@@ -8,12 +8,13 @@ license = { text = "MIT" }
 authors = [{ name = "Ben Manley" }]
 keywords = ["astronomy", "astrophotography", "dwarf3", "image-processing", "stacking"]
 dependencies = [
-    "numpy>=1.26",
-    "scipy>=1.11",
-    "astropy>=6.0",
-    "astroalign>=2.5",
-    "opencv-python-headless>=4.9",
-    "pillow>=10.0",
+    "numpy>=1.26,<3",
+    "scipy>=1.11,<2",
+    "astropy>=6.0,<9",
+    "astroalign>=2.5,<3",
+    "sep>=1.2,<2",
+    "opencv-python-headless>=4.9,<6",
+    "pillow>=10.0,<13",
     "tifffile>=2024.1.30",
 ]
 
