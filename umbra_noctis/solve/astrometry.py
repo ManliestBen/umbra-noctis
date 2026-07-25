@@ -49,12 +49,18 @@ class SolveResult:
 def solve_image(img_or_path: AstroImage | str | Path, timeout: int = 120) -> SolveResult:
     """Try every available solver in order. See module docstring."""
     if isinstance(img_or_path, AstroImage):
-        tmp = Path(tempfile.mkstemp(suffix=".fits")[1])
-        img_or_path.save_fits(tmp, bits=16)
-        path = tmp
-    else:
-        path = Path(img_or_path)
+        # The whole solver loop runs inside this directory's lifetime, so any
+        # sidecar files a backend writes next to the temp FITS (ASTAP's
+        # .wcs/.ini, for a path we made up ourselves) are swept away with it —
+        # no leaked fd, no full-size image copy left behind in /tmp.
+        with tempfile.TemporaryDirectory(prefix="umbra_solve_img_") as tmpdir:
+            path = Path(tmpdir) / "image.fits"
+            img_or_path.save_fits(path, bits=16)
+            return _run_solvers(path, timeout)
+    return _run_solvers(Path(img_or_path), timeout)
 
+
+def _run_solvers(path: Path, timeout: int) -> SolveResult:
     for solver in (_solve_astap, _solve_field, _solve_nova):
         try:
             result = solver(path, timeout)
@@ -89,16 +95,26 @@ def _solve_astap(path: Path, timeout: int) -> SolveResult:
     if not exe:
         return SolveResult(False, "astap", message="astap not installed")
     wcs_out = path.with_suffix(".wcs")
-    proc = subprocess.run(
-        [exe, "-f", str(path), "-r", "30", "-z", "0"],
-        capture_output=True, timeout=timeout, text=True)
     ini = path.with_suffix(".ini")
-    if proc.returncode != 0 or not (wcs_out.exists() or ini.exists()):
-        return SolveResult(False, "astap", message=proc.stderr[:300] or "no solution")
-    hdr = fits.Header.fromtextfile(wcs_out) if wcs_out.exists() else _ini_to_header(ini)
-    r = _wcs_from_header(hdr)
-    r.solver = "astap"
-    return r
+    # ASTAP writes these sidecars next to the input; if we didn't already
+    # have one there before calling it, we clean up after ourselves — the
+    # input path may be a real file the caller owns, not a temp of ours.
+    wcs_existed, ini_existed = wcs_out.exists(), ini.exists()
+    try:
+        proc = subprocess.run(
+            [exe, "-f", str(path), "-r", "30", "-z", "0"],
+            capture_output=True, timeout=timeout, text=True)
+        if proc.returncode != 0 or not (wcs_out.exists() or ini.exists()):
+            return SolveResult(False, "astap", message=proc.stderr[:300] or "no solution")
+        hdr = fits.Header.fromtextfile(wcs_out) if wcs_out.exists() else _ini_to_header(ini)
+        r = _wcs_from_header(hdr)
+        r.solver = "astap"
+        return r
+    finally:
+        if not wcs_existed and wcs_out.exists():
+            wcs_out.unlink()
+        if not ini_existed and ini.exists():
+            ini.unlink()
 
 
 def _ini_to_header(ini: Path):
@@ -117,23 +133,32 @@ def _solve_field(path: Path, timeout: int) -> SolveResult:
     exe = shutil.which("solve-field")
     if not exe:
         return SolveResult(False, "solve-field", message="astrometry.net not installed")
-    outdir = Path(tempfile.mkdtemp(prefix="umbra_solve_"))
-    proc = subprocess.run(
-        [exe, str(path), "--overwrite", "--no-plots", "--dir", str(outdir),
-         "--scale-units", "arcsecperpix",
-         "--scale-low", str(DWARF3_SCALE_ARCSEC * 0.5),
-         "--scale-high", str(DWARF3_SCALE_ARCSEC * 2.0)],
-        capture_output=True, timeout=timeout, text=True)
-    solved = list(outdir.glob("*.wcs"))
-    if proc.returncode != 0 or not solved:
-        return SolveResult(False, "solve-field", message=proc.stderr[:300] or "no solution")
-    with fits.open(solved[0]) as hdul:
-        r = _wcs_from_header(hdul[0].header)
-    r.solver = "solve-field"
-    return r
+    with tempfile.TemporaryDirectory(prefix="umbra_solve_") as outdir_name:
+        outdir = Path(outdir_name)
+        proc = subprocess.run(
+            [exe, str(path), "--overwrite", "--no-plots", "--dir", str(outdir),
+             "--scale-units", "arcsecperpix",
+             "--scale-low", str(DWARF3_SCALE_ARCSEC * 0.5),
+             "--scale-high", str(DWARF3_SCALE_ARCSEC * 2.0)],
+            capture_output=True, timeout=timeout, text=True)
+        solved = list(outdir.glob("*.wcs"))
+        if proc.returncode != 0 or not solved:
+            return SolveResult(False, "solve-field", message=proc.stderr[:300] or "no solution")
+        with fits.open(solved[0]) as hdul:
+            r = _wcs_from_header(hdul[0].header)
+        r.solver = "solve-field"
+        return r
 
 
 _NOVA = "https://nova.astrometry.net/api/"
+
+
+def _nova_post(url, data, headers=None):
+    """The one HTTP call nova solving makes — a module-level seam so tests
+    can monkeypatch it instead of hitting the network."""
+    req = urllib.request.Request(url, data=data, headers=headers or {})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read())
 
 
 def _solve_nova(path: Path, timeout: int) -> SolveResult:
@@ -141,13 +166,9 @@ def _solve_nova(path: Path, timeout: int) -> SolveResult:
     if not key:
         return SolveResult(False, "nova", message="UMBRA_ASTROMETRY_KEY not set")
 
-    def post(url, data, headers=None):
-        req = urllib.request.Request(url, data=data, headers=headers or {})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read())
-
-    login = post(_NOVA + "login",
-                 urllib.parse.urlencode({"request-json": json.dumps({"apikey": key})}).encode())
+    login = _nova_post(
+        _NOVA + "login",
+        urllib.parse.urlencode({"request-json": json.dumps({"apikey": key})}).encode())
     if login.get("status") != "success":
         return SolveResult(False, "nova", message="login failed")
     session = login["session"]
@@ -163,8 +184,8 @@ def _solve_nova(path: Path, timeout: int) -> SolveResult:
         f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; "
         f"filename=\"{path.name}\"\r\nContent-Type: application/octet-stream\r\n\r\n"
     ).encode() + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
-    up = post(_NOVA + "upload", body,
-              {"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    up = _nova_post(_NOVA + "upload", body,
+                    {"Content-Type": f"multipart/form-data; boundary={boundary}"})
     if up.get("status") != "success":
         return SolveResult(False, "nova", message="upload failed")
     subid = up["subid"]
@@ -172,15 +193,22 @@ def _solve_nova(path: Path, timeout: int) -> SolveResult:
     deadline = time.time() + timeout
     jobid = None
     while time.time() < deadline:
-        sub = post(_NOVA + f"submissions/{subid}", b"")
+        sub = _nova_post(_NOVA + f"submissions/{subid}", b"")
         jobs = [j for j in sub.get("jobs", []) if j]
         if jobs:
             jobid = jobs[0]
-            status = post(_NOVA + f"jobs/{jobid}", b"").get("status")
+            status = _nova_post(_NOVA + f"jobs/{jobid}", b"").get("status")
             if status == "success":
-                info = post(_NOVA + f"jobs/{jobid}/calibration/", b"")
+                info = _nova_post(_NOVA + f"jobs/{jobid}/calibration/", b"")
+                try:
+                    ra_deg = float(info.get("ra"))
+                    dec_deg = float(info.get("dec"))
+                except (TypeError, ValueError):
+                    return SolveResult(
+                        False, "nova",
+                        message=f"web solve returned incomplete calibration: {info!r}")
                 return SolveResult(True, "nova",
-                                   ra_deg=info.get("ra"), dec_deg=info.get("dec"),
+                                   ra_deg=ra_deg, dec_deg=dec_deg,
                                    scale_arcsec=info.get("pixscale"),
                                    rotation_deg=info.get("orientation"))
             if status == "failure":

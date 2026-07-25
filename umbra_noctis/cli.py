@@ -224,6 +224,11 @@ def cmd_solve(args):
     if not result.success:
         print(f"Solve failed: {result.message}")
         sys.exit(1)
+    if result.ra_deg is None or result.dec_deg is None:
+        # Belt-and-braces: a solver could in principle report success without
+        # coordinates; treat that as a failure rather than crash formatting None.
+        print(f"Solve reported success but returned no coordinates ({result.solver})")
+        sys.exit(1)
     rotation = (f"  rotation {result.rotation_deg:.1f} deg"
                 if result.rotation_deg is not None else "")
     print(f"Solved by {result.solver}: RA {result.ra_deg:.4f}  Dec {result.dec_deg:.4f}"
