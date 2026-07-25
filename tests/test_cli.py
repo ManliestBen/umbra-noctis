@@ -9,7 +9,7 @@ from PIL import Image
 
 from umbra_noctis.cli import main
 from umbra_noctis.core.image import AstroImage
-from umbra_noctis.synth import make_star_field
+from umbra_noctis.synth import make_star_field, write_demo_session
 
 
 def test_demo_data_creates_dirs(tmp_path):
@@ -46,6 +46,92 @@ def test_import_and_library_targets(tmp_path, capsys):
     main(["library", "targets", "--db", str(db)])
     out = capsys.readouterr().out
     assert "M42" in out or "M 42" in out
+
+
+def test_outputs_recorded_after_auto(tmp_path, capsys):
+    from umbra_noctis.library import Library
+
+    d = tmp_path / "demo"
+    main(["demo-data", str(d), "--frames", "6"])
+    light_dir = next(d.glob("DWARF_RAW_*"))
+    db = tmp_path / "lib.db"
+    out_dir = tmp_path / "out"
+    capsys.readouterr()
+
+    main(["auto", str(light_dir), "-o", str(out_dir), "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "recorded in the library" in out
+
+    lib = Library(db_path=db)
+    rows = lib.outputs()
+    assert len(rows) >= 1
+    assert rows[0]["path"]
+
+
+def test_library_rate_and_note(tmp_path, capsys):
+    d = tmp_path / "demo"
+    main(["demo-data", str(d), "--frames", "4"])
+    db = tmp_path / "lib.db"
+    capsys.readouterr()
+
+    main(["import", str(d), "--db", str(db)])
+    out = capsys.readouterr().out
+    sid = int(out.splitlines()[0].split("#")[1].split()[0])
+    capsys.readouterr()
+
+    main(["library", "rate", str(sid), "4", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "****" in out
+
+    main(["library", "sessions", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "****" in out
+
+    main(["library", "note", str(sid), "first", "light", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "first light" in out
+
+
+def test_library_rate_rejects_out_of_range(tmp_path, capsys):
+    d = tmp_path / "demo"
+    main(["demo-data", str(d), "--frames", "4"])
+    db = tmp_path / "lib.db"
+    capsys.readouterr()
+    main(["import", str(d), "--db", str(db)])
+    out = capsys.readouterr().out
+    sid = int(out.splitlines()[0].split("#")[1].split()[0])
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["library", "rate", str(sid), "9", "--db", str(db)])
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "0-5" in err
+
+
+def test_stack_with_flats_flag(tmp_path, capsys):
+    light_dir, _ = write_demo_session(tmp_path, n_lights=4, n_darks=2)
+
+    flat_dir = tmp_path / "flats"
+    flat_dir.mkdir()
+    flat = AstroImage(data=np.full((540, 960), 0.5, dtype=np.float32))
+    for i in range(4):
+        flat.save_fits(flat_dir / f"flat{i:02d}.fits")
+
+    out = tmp_path / "stacked.fits"
+    capsys.readouterr()
+
+    main(["stack", str(light_dir), "-o", str(out), "--flats", str(flat_dir),
+          "--no-darks"])
+    out_text = capsys.readouterr().out
+    assert "master flat from 4 frames" in out_text
+    assert out.exists()
+
+    # AstroImage.history doesn't survive a FITS round-trip (only the FITS
+    # header's truncated HISTORY cards do), so check those directly.
+    from astropy.io import fits
+    history_cards = "\n".join(fits.getheader(out).get("HISTORY", []))
+    assert "apply_flat" in history_cards
 
 
 def test_grade_prints_verdict_table(tmp_path, capsys):

@@ -68,6 +68,15 @@ def cmd_import(args):
     print(f"\n{added} new / {len(sessions)} total sessions -> {lib.db_path}")
 
 
+def _print_session_row(r):
+    mins = int((r["integration_s"] or 0) // 60)
+    stars = "*" * (r["rating"] or 0)
+    print(f"  #{r['id']:<4} {r['timestamp'] or '?':<22} {r['target_display'] or '?':<26}"
+          f"{r['frame_count'] or 0:>4} fr {mins:>5}min  {stars}")
+    if r["notes"]:
+        print(f"        note: {r['notes']}")
+
+
 def cmd_library(args):
     from .library import Library
     lib = Library(db_path=args.db)
@@ -84,12 +93,35 @@ def cmd_library(args):
     elif args.what == "outputs":
         for r in lib.outputs():
             print(f"  {r['created_at']}  {r['target']:<10} {r['name']:<24} {r['path']}")
+    elif args.what in ("rate", "note"):
+        if len(args.args) < 2:
+            print(f"usage: umbra library {args.what} <session-id> "
+                  + ("<0-5>" if args.what == "rate" else "<text>"), file=sys.stderr)
+            sys.exit(1)
+        try:
+            session_id = int(args.args[0])
+        except ValueError:
+            print(f"error: session-id must be an integer, got {args.args[0]!r}", file=sys.stderr)
+            sys.exit(1)
+        if lib.session(session_id) is None:
+            print(f"error: no session #{session_id} in the library", file=sys.stderr)
+            sys.exit(1)
+        if args.what == "rate":
+            try:
+                rating = int(args.args[1])
+            except ValueError:
+                print(f"error: rating must be an integer, got {args.args[1]!r}", file=sys.stderr)
+                sys.exit(1)
+            if not 0 <= rating <= 5:
+                print(f"error: rating must be 0-5, got {rating}", file=sys.stderr)
+                sys.exit(1)
+            lib.set_rating(session_id, rating)
+        else:
+            lib.set_notes(session_id, " ".join(args.args[1:]))
+        _print_session_row(lib.session(session_id))
     else:  # sessions
         for r in lib.sessions(target=args.target):
-            mins = int((r["integration_s"] or 0) // 60)
-            stars = "*" * (r["rating"] or 0)
-            print(f"  #{r['id']:<4} {r['timestamp'] or '?':<22} {r['target_display'] or '?':<26}"
-                  f"{r['frame_count'] or 0:>4} fr {mins:>5}min  {stars}")
+            _print_session_row(r)
 
 
 def cmd_grade(args):
@@ -117,6 +149,7 @@ def cmd_stack(args):
     from .ingest import parse_session
     from .recipes.auto import find_matching_darks
     from .stack import integrate
+    from .stack.integrate import demosaic
 
     s = parse_session(args.session)
     print(f"Stacking: {s.summary()}")
@@ -133,9 +166,18 @@ def cmd_stack(args):
             master_dark = build_master(found.lights)
             print(f"  master dark auto-found: {found.path.name}")
 
+    master_flat = None
+    if args.flats:
+        from .ingest import parse_session as ps
+        flats = ps(args.flats)
+        master_flat = build_master(flats.lights, method="median")
+        if master_flat.cfa:
+            master_flat = demosaic(master_flat)
+        print(f"  master flat from {len(flats.lights)} frames")
+
     out = Path(args.output)
     result = integrate(
-        s.lights, master_dark=master_dark,
+        s.lights, master_dark=master_dark, master_flat=master_flat,
         rejection_sigma=args.sigma, drizzle=args.drizzle,
         best_fraction=args.best, quality_filter=not args.keep_all,
         work_dir=out.parent,
@@ -148,6 +190,8 @@ def cmd_stack(args):
 
 
 def cmd_auto(args):
+    from .ingest import parse_session
+    from .library import Library, resolve_target
     from .recipes import auto_process
     logs = []
 
@@ -163,6 +207,17 @@ def cmd_auto(args):
         print(f"  {p}")
     if any("SKIPPED" in m for m in logs):
         print("\nWARNING: one or more processing steps were skipped — check the log above.")
+
+    try:
+        session = parse_session(args.session)
+        lib = Library(db_path=args.db)
+        sid, _ = lib.import_session(session)
+        target = resolve_target(session.target)["canonical"]
+        for p in exported:
+            lib.add_output(target=target, name=p.stem, path=p, session_id=sid)
+        print(f"\n{len(exported)} output(s) recorded in the library -> {lib.db_path}")
+    except Exception as exc:
+        print(f"\n(library not updated: {exc})")
 
 
 def cmd_process(args):
@@ -396,7 +451,9 @@ def main(argv=None):
 
     p = sub.add_parser("library", help="browse the library")
     p.add_argument("what", nargs="?", default="sessions",
-                   choices=("sessions", "targets", "outputs"))
+                   choices=("sessions", "targets", "outputs", "rate", "note"))
+    p.add_argument("args", nargs="*",
+                   help="rate <session-id> <0-5>   |   note <session-id> <text>")
     p.add_argument("--target")
     p.add_argument("--db", default=None)
     p.set_defaults(func=cmd_library)
@@ -411,6 +468,9 @@ def main(argv=None):
     p.add_argument("-o", "--output", required=True, help=".fits recommended")
     p.add_argument("--darks", help="dark session folder (auto-detected if omitted)")
     p.add_argument("--no-darks", action="store_true", help="skip dark search")
+    p.add_argument("--flats",
+                   help="flat-field session folder (t-shirt/panel flats); "
+                        "builds a master flat")
     p.add_argument("--sigma", type=float, default=3.0, help="pixel rejection sigma")
     p.add_argument("--drizzle", type=float, default=1.0, choices=[1.0, 1.5, 2.0],
                    help="integrate onto a finer grid")
@@ -423,6 +483,9 @@ def main(argv=None):
     p.add_argument("session")
     p.add_argument("-o", "--output", required=True, help="output directory")
     p.add_argument("--darks")
+    p.add_argument("--db", default=None,
+                   help="library database path (default ~/.umbra-noctis); "
+                        "exported outputs are recorded here")
     p.set_defaults(func=cmd_auto)
 
     p = sub.add_parser("process", help="apply operations/recipes to an image")

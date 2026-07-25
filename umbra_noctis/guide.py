@@ -48,7 +48,9 @@ _DEEPSKY = """
    (auto-matching darks by exposure+gain), registers with rotation support
    (mandatory for alt-az field rotation), and integrates with winsorized
    sigma-clipping so satellites and cosmic rays vanish. `--drizzle 2` for
-   finer sampling, `--best 0.8` to keep the best 80% of frames.
+   finer sampling, `--best 0.8` to keep the best 80% of frames. `--flats DIR`
+   builds a master flat from a folder of t-shirt/panel flat frames and
+   corrects vignetting/dust motes.
 4. **Process** — `umbra process stacked.fits -o final.jpg --auto-finish`
    runs the standard chain, or build your own with `--op` (see the
    *Processing Operations* topic). Keep intermediates in FITS to stay linear.

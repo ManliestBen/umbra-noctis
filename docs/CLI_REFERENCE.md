@@ -31,12 +31,17 @@ Walk a tree, import every session found into the library (duplicates
 detected by content fingerprint). `--db` overrides the default
 `~/.umbra-noctis/library.db` (or set `UMBRA_HOME`).
 
-## `umbra library [sessions|targets|outputs] [--target NAME] [--db PATH]`
+## `umbra library [sessions|targets|outputs|rate|note] [--target NAME] [--db PATH]`
 
 - `sessions` — every imported session (id, night, target, frames, minutes, rating).
 - `targets` — per-target rollup: sessions, frames, total integration. Your
   acquisition dashboard.
-- `outputs` — every registered export, newest first.
+- `outputs` — every registered export, newest first (populated automatically
+  by `umbra auto` and the GUI's Export page).
+- `rate <session-id> <0-5>` — set a session's star rating, e.g.
+  `umbra library rate 12 4`. Rejects anything outside 0-5.
+- `note <session-id> <text>` — attach a free-text note to a session, e.g.
+  `umbra library note 12 "thin cirrus after midnight"`.
 
 `--target` filters by any alias ("andromeda" finds M31 sessions).
 
@@ -55,6 +60,7 @@ Calibrate → register → integrate.
 | `-o, --output` | required | `.fits` recommended (keeps it linear for processing) |
 | `--darks DIR` | auto | Dark session folder; otherwise auto-matched by exposure+gain |
 | `--no-darks` | off | Skip the automatic dark search |
+| `--flats DIR` | none | Flat-field session folder (t-shirt/panel flats); builds a master flat |
 | `--sigma S` | 3.0 | Pixel rejection threshold (lower = more aggressive) |
 | `--best F` | 0.9 | Keep best fraction of frames by quality score |
 | `--keep-all` | off | Disable quality rejection entirely |
