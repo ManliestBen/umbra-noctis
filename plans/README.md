@@ -13,7 +13,7 @@ finding; plans were still selected on merit — see the rejected list below.
 | 001 | CI, working lint, honest tests, bounded deps | P1 | M | — | DONE (reviewed; incl. approved pull-forward of 003's lastrowid fix) |
 | 002 | Docs truth pass + CLAUDE.md | P2 | M | 001 (env only) | DONE (reviewed) |
 | 003 | Library import corruption, schema versioning, ingest hardening | P1 | M | 001 | DONE (reviewed; 1 revision round for was_new flag) |
-| 004 | Real quality scoring + memory ceilings removed | P1 | L | 001 | TODO |
+| 004 | Real quality scoring + memory ceilings removed | P1 | L | 001 | DONE (reviewed; np.stack criterion note — 2 unrelated matches remain by design) |
 | 005 | CLI/solve/trails hardening + CLI & solve tests | P1 | L | 004 | TODO |
 | 006 | GUI thread safety + shared numerics consolidation | P2 | L | 004, 005 | TODO |
 | 007 | Export sidecars, outputs catalog, ratings, --flats | P2 | M | 003, 005 | TODO |
