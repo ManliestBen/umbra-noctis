@@ -89,6 +89,18 @@ Subtractive Chromatic Noise Reduction: clamps green to the average of
 |---|---|---|---|---|
 | `amount` | float | 1.0 | 0.0–1.0 | 1.0 = full removal |
 
+### `vignette_correct` — Vignetting correction
+
+Remove radial lens vignetting (dark corners) by fitting a smooth 2-D
+    illumination surface to the image's own star-free background and dividing
+    it out — a synthetic flat. Made for wide-angle DSLR nightscapes and
+    Dwarf 3 frames when no real flats exist. Run before stretching.
+
+| Parameter | Type | Default | Range | Description |
+|---|---|---|---|---|
+| `strength` | float | 1.0 | 0.0–1.0 | 0 = off, 1 = full correction |
+| `box` | int | 64 | 16–256 | Sampling box size in pixels |
+
 ### `white_balance` — White balance (star-based or manual)
 
 Color-balance the image. Auto mode assumes the *average* star in a wide
@@ -222,8 +234,9 @@ Wavelet-scale sharpening (the RegiStax idea, applied to deep-sky).
 
 Shrink stars so the nebula/galaxy becomes the subject. Morphological
     erosion blended in only under a star mask — the background is untouched.
-    Run AFTER stretching. For full removal, use an external StarNet++/GraXpert
-    via `umbra integrate-tool` (see docs).
+    Run AFTER stretching. For full star removal, export a 16-bit TIFF
+    (umbra process ... -o starless-input.tif), run an external
+    StarNet++/GraXpert on it, and re-import the result.
 
 | Parameter | Type | Default | Range | Description |
 |---|---|---|---|---|
@@ -291,4 +304,18 @@ Remove a residual satellite streak segment, dust blob, or edge artifact.
 | `radius` | int | 12 | 2–200 | Patch radius |
 | `src_x` | int | -1 |  | Source center; -1 = auto (inpaint) |
 | `src_y` | int | -1 |  | Source center; -1 = auto (inpaint) |
+
+### `defringe` — Defringe (chromatic aberration)
+
+Suppress purple/green color fringes around bright stars and
+    high-contrast edges — the chromatic aberration every fast wide-angle
+    lens (e.g. an f/2.8 zoom shot wide open on star fields) produces.
+    Pixels whose color reads as fringe *and* sit near a bright gradient are
+    pulled toward the green channel; everything else is untouched, so real
+    star and nebula color survives.
+
+| Parameter | Type | Default | Range | Description |
+|---|---|---|---|---|
+| `amount` | float | 0.8 | 0.0–1.0 | Fringe suppression strength |
+| `hue` | choice | purple | purple, green, both | Which fringe color to target |
 
