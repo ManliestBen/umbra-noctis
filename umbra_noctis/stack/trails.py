@@ -59,7 +59,7 @@ def collect_frames(paths: list[str | Path]) -> list[Path]:
 def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
                 align: bool = False, cosmetic: bool = True,
                 fade: float = 0.0, fill_gaps: bool = True,
-                demosaic_method: str = "ea",
+                demosaic_method: str = "ea", want_mean: bool = False,
                 progress=None, log=None) -> TrailResult:
     """Lighten-blend ``paths`` into one composite.
 
@@ -77,9 +77,11 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
     - ``fill_gaps``: bridge the small dark dashes the intervalometer's
       re-arm time leaves between consecutive exposures' trail segments
       (grayscale morphological closing on the finished blend).
-
-    ``TrailResult.mean_image`` is the plain average of all frames — a
-    noise-reduced base to recover a clean landscape/foreground from.
+    - ``want_mean``: also accumulate the plain average of all frames into
+      ``TrailResult.mean_image`` — a noise-reduced base to recover a clean
+      landscape/foreground from. Off by default: it's a second full-frame
+      float64 accumulator that most callers (plain star trails, no
+      ``--foreground`` requested) never look at.
     """
     logs: list[str] = []
 
@@ -99,6 +101,7 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
     n_used = 0
     n_skipped = 0
     fade = min(max(float(fade), 0.0), 0.5)
+    dark_mismatch_logged = False
 
     for i, path in enumerate(paths):
         try:
@@ -109,8 +112,14 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
             continue
         if img.cfa:
             img = demosaic(img, demosaic_method)
-        if master_dark is not None and master_dark.data.shape == img.data.shape:
-            img = subtract_dark(img, master_dark)
+        if master_dark is not None:
+            if master_dark.data.shape == img.data.shape:
+                img = subtract_dark(img, master_dark)
+            elif not dark_mismatch_logged:
+                _log(f"Master dark shape {master_dark.data.shape} != frame "
+                     f"shape {img.data.shape} — dark subtraction skipped "
+                     f"for this session")
+                dark_mismatch_logged = True
 
         if ref_img is None:
             ref_img = img
@@ -129,13 +138,15 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
         if max_acc is None:
             max_acc = np.nan_to_num(data, nan=0.0).copy()
             min_lum = img.luminance().copy()
-            mean_acc = np.nan_to_num(data, nan=0.0).astype(np.float64)
+            if want_mean:
+                mean_acc = np.nan_to_num(data, nan=0.0).astype(np.float64)
         else:
             if fade > 0.0:
                 max_acc *= (1.0 - fade)
             max_acc = np.fmax(max_acc, data)
             min_lum = np.fmin(min_lum, img.luminance())
-            mean_acc += np.nan_to_num(data, nan=0.0)
+            if want_mean:
+                mean_acc += np.nan_to_num(data, nan=0.0)
         n_used += 1
         if progress:
             progress("blend", i + 1, len(paths))
@@ -177,9 +188,11 @@ def trail_stack(paths: list[str | Path], master_dark: AstroImage | None = None,
             result.meta["total_integration_s"] = float(exp) * n_used
         except (TypeError, ValueError):
             pass
-    mean_image = ref_img.with_data(
-        np.clip((mean_acc / max(n_used, 1)).astype(np.float32), 0.0, 1.0))
-    mean_image.record("trail_mean", {"n_frames": n_used})
+    mean_image = None
+    if want_mean and mean_acc is not None:
+        mean_image = ref_img.with_data(
+            np.clip((mean_acc / max(n_used, 1)).astype(np.float32), 0.0, 1.0))
+        mean_image.record("trail_mean", {"n_frames": n_used})
 
     result.record("trail_stack", {
         "n_frames": n_used, "n_skipped": n_skipped,

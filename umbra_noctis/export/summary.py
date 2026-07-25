@@ -23,13 +23,15 @@ def acquisition_caption(sessions: list[DwarfSession], n_used: int | None = None)
     nights = len({s.timestamp[:10] for s in sessions if s.timestamp})
     exp = sessions[0].exposure_s
     gain = sessions[0].gain
+    exp_str = f"{exp:g}" if exp else "?"
+    gain_str = f"{gain}" if gain else "?"
     hours, rem = divmod(int(total_s), 3600)
     mins = rem // 60
     lines = [
         f"{target['display']}",
         "",
         "Telescope: DwarfLab Dwarf 3 (150 mm f/4.3, IMX678)",
-        f"Frames: {n_used or frames} × {exp:g}s @ gain {gain}"
+        f"Frames: {n_used or frames} × {exp_str}s @ gain {gain_str}"
         + (f" across {nights} night(s)" if nights > 1 else ""),
         f"Integration: {hours}h {mins:02d}m",
         "Processed with Umbra Noctis",

@@ -278,7 +278,7 @@ def cmd_trails(args):
     result = trail_stack(
         frames, master_dark=master_dark, align=args.align,
         cosmetic=not args.no_cosmetic, fade=args.fade,
-        fill_gaps=not args.no_gap_fill,
+        fill_gaps=not args.no_gap_fill, want_mean=bool(args.foreground),
         progress=_progress_printer, log=lambda m: print("  " + m))
 
     out = Path(args.output)

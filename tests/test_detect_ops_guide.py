@@ -132,11 +132,19 @@ def test_gap_fill_bridges_dashes(tmp_path):
 
 def test_mean_image_is_average(tmp_path):
     paths = _trail_frames(tmp_path, n=4)
-    result = trail_stack(paths, cosmetic=False, fill_gaps=False)
+    result = trail_stack(paths, cosmetic=False, fill_gaps=False, want_mean=True)
     assert result.mean_image is not None
     # a pixel lit in exactly one of four frames averages to ~1/4 brightness
     assert result.mean_image.data[20, 8] == pytest.approx(
         (0.9 + 3 * 0.03) / 4, abs=0.01)
+
+
+def test_mean_image_none_by_default(tmp_path):
+    """want_mean defaults to False: no second full-frame accumulator for
+    callers (plain star trails) that never ask for a foreground."""
+    paths = _trail_frames(tmp_path, n=4)
+    result = trail_stack(paths, cosmetic=False, fill_gaps=False)
+    assert result.mean_image is None
 
 
 # -------------------------------------------------------------- new ops

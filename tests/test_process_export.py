@@ -6,7 +6,8 @@ import pytest
 import umbra_noctis.process  # noqa: F401 — registers ops
 from umbra_noctis.core.image import AstroImage
 from umbra_noctis.core.ops import OPS, apply_op
-from umbra_noctis.export import export_image, save_comparison
+from umbra_noctis.export import acquisition_caption, export_image, save_comparison
+from umbra_noctis.ingest.session import DwarfSession
 from umbra_noctis.process.display import auto_stretch_display
 from umbra_noctis.recipes import Recipe, auto_process, run_recipe
 from umbra_noctis.synth import make_star_field, write_demo_session
@@ -154,6 +155,16 @@ def test_export_formats(tmp_path):
         assert p.exists() and p.stat().st_size > 1000
     cmp_path = save_comparison(_color_img(), img, tmp_path / "cmp.jpg")
     assert cmp_path.exists()
+
+
+def test_acquisition_caption_handles_missing_exposure_and_gain(tmp_path):
+    """exposure_s/gain can be None (malformed folder name, missing
+    shotsInfo field) — the caption must degrade to '?' instead of
+    crashing on `f"{None:g}"`."""
+    s = DwarfSession(path=tmp_path, target="M42", exposure_s=None, gain=None)
+    caption = acquisition_caption([s])
+    assert "?s @ gain ?" in caption
+    assert "None" not in caption
 
 
 def test_display_autostretch_visibility():
