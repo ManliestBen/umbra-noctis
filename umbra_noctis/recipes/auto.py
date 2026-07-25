@@ -12,6 +12,7 @@ a black box.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ..calib.masters import build_master
@@ -89,10 +90,16 @@ def auto_process(session_dir: str | Path, out_dir: str | Path,
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    base = session.target.replace(" ", "") or "result"
+    # session.target comes from untrusted metadata (folder name, shotsInfo.json,
+    # or a FITS OBJECT header) — strip everything but a safe filename alphabet
+    # so it can never escape out_dir via path separators or "..".
+    base = re.sub(r"[^A-Za-z0-9_-]+", "", session.target.replace(" ", "_")) or "result"
     exported = []
     for fmt in export_formats:
-        p = export_image(img, out_dir / f"{base}.{fmt}")
+        dest = out_dir / f"{base}.{fmt}"
+        if out_dir.resolve() not in dest.resolve().parents:
+            raise ValueError(f"unsafe output name derived from target {session.target!r}")
+        p = export_image(img, dest)
         exported.append(p)
         _log(f"exported {p}")
     return img, result, exported

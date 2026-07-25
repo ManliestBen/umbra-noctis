@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 
@@ -161,3 +163,23 @@ def test_auto_process_end_to_end(tmp_path):
     # the darks folder next to the lights must have been found automatically
     assert any(h["op"] == "subtract_dark" for h in img.history), \
         "auto pipeline should have found and subtracted the darks next door"
+
+
+def test_auto_output_name_is_sanitized(tmp_path):
+    """session.target comes from untrusted metadata — a folder name can't
+    contain "/", but shotsInfo.json's "target" field can. The output
+    filename must be slugified so a malicious target can't write outside
+    out_dir."""
+    light_dir, _ = write_demo_session(tmp_path / "session", n_lights=5, n_darks=0)
+    info_path = light_dir / "shotsInfo.json"
+    info = json.loads(info_path.read_text())
+    info["target"] = "../../evil/../../etc/passwd"
+    info_path.write_text(json.dumps(info))
+
+    out_dir = tmp_path / "out"
+    _, _, exported = auto_process(light_dir, out_dir, export_formats=("jpg",))
+    assert len(exported) == 1
+    for p in exported:
+        assert out_dir.resolve() in p.resolve().parents
+        assert ".." not in p.name
+        assert "/" not in p.name
