@@ -8,12 +8,22 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QDialog,
-                               QHBoxLayout, QLabel, QListWidget, QMainWindow,
-                               QMessageBox, QPushButton, QStackedWidget,
-                               QTextBrowser, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (
+    QApplication,
+    QButtonGroup,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QStackedWidget,
+    QTextBrowser,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .. import __app_name__, __version__
 from .pages_data import GradePage, LibraryPage

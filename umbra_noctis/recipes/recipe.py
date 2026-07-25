@@ -22,7 +22,7 @@ class Recipe:
     description: str = ""
 
     @classmethod
-    def load(cls, path: str | Path) -> "Recipe":
+    def load(cls, path: str | Path) -> Recipe:
         raw = json.loads(Path(path).read_text())
         return cls(name=raw.get("name", Path(path).stem),
                    steps=raw.get("steps", []),
@@ -35,7 +35,7 @@ class Recipe:
         return Path(path)
 
     @classmethod
-    def from_history(cls, img: AstroImage, name: str = "derived") -> "Recipe":
+    def from_history(cls, img: AstroImage, name: str = "derived") -> Recipe:
         """Turn an image's processing history into a reusable recipe
         (only steps that are registered ops are kept)."""
         steps = [{"op": h["op"], "params": h.get("params", {})}

@@ -5,10 +5,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (QAbstractItemView, QFileDialog, QHBoxLayout,
-                               QHeaderView, QLabel, QPushButton, QSplitter,
-                               QTableWidget, QTableWidgetItem, QVBoxLayout,
-                               QWidget)
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QFileDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QPushButton,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ..core.image import AstroImage
 from ..grade.metrics import grade_session
@@ -175,8 +184,9 @@ class GradePage(QWidget):
         self.canvas = ImageCanvas()
         rl.addWidget(self.canvas, 1)
         nav = QHBoxLayout()
-        for text, slot in [("◀ Prev (←)", self.prev_frame), ("Next (→) ▶", self.next_frame),
-                           ("Reject (X)", self.reject_current), ("Accept (A)", self.accept_current)]:
+        nav_buttons = [("◀ Prev (←)", self.prev_frame), ("Next (→) ▶", self.next_frame),
+                       ("Reject (X)", self.reject_current), ("Accept (A)", self.accept_current)]
+        for text, slot in nav_buttons:
             b = QPushButton(text)
             b.clicked.connect(slot)
             nav.addWidget(b)
@@ -220,7 +230,7 @@ class GradePage(QWidget):
 
     def _fill_table(self):
         self.table.setRowCount(0)
-        for i, q in enumerate(self.state.qualities):
+        for _i, q in enumerate(self.state.qualities):
             r = self.table.rowCount()
             self.table.insertRow(r)
             verdict = "OK" if q.accepted else "✗ " + ", ".join(q.reject_reasons or [])

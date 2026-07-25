@@ -1,8 +1,14 @@
 import numpy as np
 import pytest
+from astropy.io import fits
 
-from umbra_noctis.calib import (build_master, cosmetic_correction, hot_pixel_map,
-                                subtract_dark, synthetic_flat)
+from umbra_noctis.calib import (
+    build_master,
+    cosmetic_correction,
+    hot_pixel_map,
+    subtract_dark,
+    synthetic_flat,
+)
 from umbra_noctis.core.image import AstroImage
 from umbra_noctis.grade import grade_session
 from umbra_noctis.ingest import parse_session
@@ -38,8 +44,7 @@ def test_registration_recovers_known_transform():
     # astroalign should recover the inverse transform to sub-pixel accuracy
     assert abs(abs(t.rotation_deg) - 1.6) < 0.1
     # verify by mapping a star position through the matrix
-    src = np.array([480.0, 270.0, 1.0])  # center is rotation-invariant, use offset point
-    src = np.array([600.0, 300.0, 1.0])
+    src = np.array([600.0, 300.0, 1.0])  # center is rotation-invariant, use offset point
     mapped = t.matrix @ src
     # ground truth: rotate about center then shift, inverted
     theta = np.deg2rad(1.6)
@@ -69,19 +74,16 @@ def test_dark_subtraction_and_hot_pixels():
     assert float(fixed.data[hot].mean()) < 0.2
 
 
-def test_build_master_sigma_clip():
+def test_build_master_sigma_clip(tmp_path):
     rng = np.random.default_rng(3)
     frames = [np.full((40, 40), 0.05, dtype=np.float32) + rng.normal(0, 0.01, (40, 40))
               for _ in range(10)]
     frames[4][10, 10] = 1.0  # cosmic ray in one frame
     paths = []
-    import tempfile
-    from astropy.io import fits as _fits
-    tmp = tempfile.mkdtemp()
     for i, f in enumerate(frames):
-        p = f"{tmp}/{i}.fits"
-        _fits.PrimaryHDU((np.clip(f, 0, 1) * 65535).astype(np.uint16)).writeto(p)
-        paths.append(p)
+        p = tmp_path / f"d{i}.fits"
+        fits.PrimaryHDU((np.clip(f, 0, 1) * 65535).astype(np.uint16)).writeto(p)
+        paths.append(str(p))
     master = build_master(paths, method="sigma_clip")
     assert abs(float(master.data[10, 10]) - 0.05) < 0.02  # outlier rejected
 
@@ -98,6 +100,11 @@ def test_synthetic_flat_flattens_vignette():
     corner = float(fixed.data[5:20, 5:20].mean())
     center = float(fixed.data[90:110, 140:160].mean())
     assert abs(corner - center) / center < 0.08  # within 8% after correction
+
+
+def test_sep_backend_available():
+    from umbra_noctis.grade import stars
+    assert stars._HAVE_SEP, "sep must be installed — star detection quality depends on it"
 
 
 @pytest.mark.slow

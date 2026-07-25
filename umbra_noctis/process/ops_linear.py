@@ -121,8 +121,9 @@ def white_balance(img: AstroImage, r: float = 1.0, g: float = 1.0, b: float = 1.
             for s in stars:
                 x, y = int(round(s["x"])), int(round(s["y"]))
                 patch = data[max(0, y - 3):y + 4, max(0, x - 3):x + 4]
-                sums += np.maximum(
-                    patch.reshape(-1, 3).sum(axis=0) - np.array(bg) * patch.shape[0] * patch.shape[1], 1e-9)
+                patch_sum = patch.reshape(-1, 3).sum(axis=0)
+                bg_total = np.array(bg) * patch.shape[0] * patch.shape[1]
+                sums += np.maximum(patch_sum - bg_total, 1e-9)
             gains = sums[1] / np.maximum(sums, 1e-12)  # normalize to green
     for c in range(3):
         med = float(np.median(data[..., c]))

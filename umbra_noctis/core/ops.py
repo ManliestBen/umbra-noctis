@@ -16,8 +16,8 @@ record — so history/reproducibility can never be forgotten by an op author.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from .image import AstroImage
 

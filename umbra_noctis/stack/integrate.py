@@ -22,8 +22,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ..calib.masters import (cosmetic_correction, hot_pixel_map,
-                             hot_pixels_from_lights, subtract_dark)
+from ..calib.masters import (
+    cosmetic_correction,
+    hot_pixel_map,
+    hot_pixels_from_lights,
+    subtract_dark,
+)
 from ..core.image import AstroImage
 from ..grade.metrics import FrameQuality, grade_frame
 from .register import Transform, pick_reference, register_frames, warp
@@ -135,24 +139,22 @@ def integrate(
     # ------------------------------------------------------- quality filter
     kept_idx = list(range(len(frames)))
     if quality_filter and len(frames) >= 5:
-        from ..grade.metrics import grade_session  # reuse session-relative logic
         # Re-run the session-relative rejection on already-computed metrics.
-        import numpy as _np
-        n_stars = _np.array([q.n_stars for q in qualities], dtype=float)
-        star_med = max(_np.nanmedian(n_stars), 1.0)
-        fwhm = _np.array([q.fwhm for q in qualities])
-        med_f = _np.nanmedian(fwhm)
-        mad_f = _np.nanmedian(_np.abs(fwhm - med_f)) * 1.4826 + 1e-9
-        bg = _np.array([q.background for q in qualities])
-        med_b = _np.nanmedian(bg)
-        mad_b = _np.nanmedian(_np.abs(bg - med_b)) * 1.4826 + 1e-9
+        n_stars = np.array([q.n_stars for q in qualities], dtype=float)
+        star_med = max(np.nanmedian(n_stars), 1.0)
+        fwhm = np.array([q.fwhm for q in qualities])
+        med_f = np.nanmedian(fwhm)
+        mad_f = np.nanmedian(np.abs(fwhm - med_f)) * 1.4826 + 1e-9
+        bg = np.array([q.background for q in qualities])
+        med_b = np.nanmedian(bg)
+        mad_b = np.nanmedian(np.abs(bg - med_b)) * 1.4826 + 1e-9
 
         kept_idx = []
         for i, q in enumerate(qualities):
             reasons = []
             if q.n_stars < 0.3 * star_med:
                 reasons.append("clouds")
-            if _np.isfinite(fwhm[i]) and fwhm[i] > med_f + 3.5 * mad_f:
+            if np.isfinite(fwhm[i]) and fwhm[i] > med_f + 3.5 * mad_f:
                 reasons.append("soft")
             if bg[i] > med_b + 3.5 * mad_b:
                 reasons.append("bright sky")
@@ -207,7 +209,7 @@ def integrate(
     shape = (n, out_h, out_w, 3) if is_color else (n, out_h, out_w)
     cube = np.memmap(Path(tmpdir.name) / "cube.dat", dtype=np.float32,
                      mode="w+", shape=shape)
-    for i, (img, t) in enumerate(zip(used, transforms)):
+    for i, (img, t) in enumerate(zip(used, transforms, strict=False)):
         data = img.data
         if normalize and i != ref_local:
             data = _normalize_to_ref(data, ref_median, ref_scale)

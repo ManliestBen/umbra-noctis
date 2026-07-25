@@ -1,9 +1,9 @@
 from .masters import (
-    build_master,
-    subtract_dark,
     apply_flat,
-    hot_pixel_map,
+    build_master,
     cosmetic_correction,
+    hot_pixel_map,
+    subtract_dark,
     synthetic_flat,
 )
 

@@ -57,7 +57,7 @@ def make_star_field(
     sigma = fwhm / 2.3548
     half = max(4, int(4 * sigma))
     yy, xx = np.mgrid[-half:half + 1, -half:half + 1]
-    for x, y, f in zip(xs, ys, fluxes):
+    for x, y, f in zip(xs, ys, fluxes, strict=False):
         ix, iy = int(round(x)), int(round(y))
         if not (half <= ix < width - half and half <= iy < height - half):
             continue
@@ -106,7 +106,9 @@ def write_demo_session(
     Returns ``(light_session_dir, dark_session_dir)``.
     """
     root = Path(root)
-    light_dir = root / f"DWARF_RAW_TELE_{target}_EXP_{exposure_s:g}_GAIN_{gain}_2026-07-20-22-30-15-000"
+    light_dir = root / (
+        f"DWARF_RAW_TELE_{target}_EXP_{exposure_s:g}_GAIN_{gain}_2026-07-20-22-30-15-000"
+    )
     dark_dir = root / f"DWARF_DARK_EXP_{exposure_s:g}_GAIN_{gain}_2026-07-20-20-05-01-000"
     light_dir.mkdir(parents=True, exist_ok=True)
     dark_dir.mkdir(parents=True, exist_ok=True)

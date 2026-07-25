@@ -73,8 +73,8 @@ def _wcs_from_header(hdr) -> SolveResult:
         return SolveResult(False, "wcs", message="no celestial WCS in solution")
     ra, dec = float(hdr.get("CRVAL1", 0)), float(hdr.get("CRVAL2", 0))
     try:
-        from astropy.wcs.utils import proj_plane_pixel_scales
         import numpy as np
+        from astropy.wcs.utils import proj_plane_pixel_scales
         scale = float(proj_plane_pixel_scales(w.celestial).mean() * 3600)
         cd = w.celestial.pixel_scale_matrix
         rot = float(np.degrees(np.arctan2(cd[1, 0], cd[0, 0])))
