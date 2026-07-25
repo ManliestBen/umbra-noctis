@@ -16,7 +16,7 @@ finding; plans were still selected on merit — see the rejected list below.
 | 004 | Real quality scoring + memory ceilings removed | P1 | L | 001 | DONE (reviewed; np.stack criterion note — 2 unrelated matches remain by design) |
 | 005 | CLI/solve/trails hardening + CLI & solve tests | P1 | L | 004 | DONE (reviewed) |
 | 006 | GUI thread safety + shared numerics consolidation | P2 | L | 004, 005 | DONE (reviewed; GradePage busy-guard folded into 007) |
-| 007 | Export sidecars, outputs catalog, ratings, --flats | P2 | M | 003, 005 | TODO |
+| 007 | Export sidecars, outputs catalog, ratings, --flats | P2 | M | 003, 005 | DONE (reviewed; incl. GradePage worker guard from 006 follow-up) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rationale)
 
@@ -36,6 +36,12 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (reason) | REJECTED (rational
 ## Findings considered and rejected / deferred
 
 Audit findings NOT planned, so nobody re-audits them:
+
+- **NEW (found during plan 007 execution): `AstroImage.from_fits` never
+  reconstructs `history` from the FITS HISTORY cards `save_fits` writes**
+  (the cards are truncated JSON, so full reconstruction needs a design
+  decision — sidecar-based reload is the likely right answer now that
+  exports ship `.umbra.json`). Worth a small follow-up plan next cycle.
 
 - **PERF-04 (parallelize per-frame stages)** — deferred: highest wall-clock
   payoff but must land after 004's two-pass shape; do as its own plan next
