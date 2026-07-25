@@ -107,6 +107,29 @@ def test_sep_backend_available():
     assert stars._HAVE_SEP, "sep must be installed — star detection quality depends on it"
 
 
+def test_integrate_scores_frames(tmp_path):
+    """grade_frame alone never sets .score — integrate must run the
+    composite scorer so weighting, best-fraction, and reference selection
+    all have real numbers to work with, not silent all-ones/all-zeros."""
+    light_dir, _ = write_demo_session(tmp_path, n_lights=8, n_darks=0)
+    session = parse_session(light_dir)
+    result = integrate(session.lights)
+    scores = [q.score for q in result.qualities]
+    assert any(s > 0 for s in scores)
+    assert len(set(scores)) > 1, "scores should differ frame to frame, not be uniform"
+
+
+def test_reference_is_not_blindly_first(tmp_path):
+    """pick_reference already sorts by score; once scores are real, the
+    chosen reference must be the sharpest KEPT frame, not always index 0."""
+    light_dir, _ = write_demo_session(tmp_path, n_lights=8, n_darks=0)
+    session = parse_session(light_dir)
+    result = integrate(session.lights)
+    kept_qualities = [(i, q) for i, q in enumerate(result.qualities) if q.accepted]
+    best_kept_index = max(kept_qualities, key=lambda iq: iq[1].score)[0]
+    assert result.reference_index == best_kept_index
+
+
 @pytest.mark.slow
 def test_end_to_end_integration_improves_snr(tmp_path):
     light_dir, dark_dir = write_demo_session(tmp_path, n_lights=10, n_darks=6)

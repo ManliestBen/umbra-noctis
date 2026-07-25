@@ -113,7 +113,24 @@ def grade_session(frames: list[str | Path], k: float = 3.5,
         q.reject_reasons = reasons
         q.accepted = not reasons
 
-    # Composite score: rank-based so it is robust to outliers.
+    score_qualities(results)
+    return results
+
+
+def score_qualities(results: list[FrameQuality]) -> list[FrameQuality]:
+    """Composite 0-100 quality score, rank-based so it is robust to outliers.
+
+    Sets ``score`` in place on every :class:`FrameQuality` in ``results`` and
+    returns the same list. Used by :func:`grade_session` and by
+    ``stack.integrate`` when it grades frames itself.
+    """
+    if not results:
+        return results
+    n_stars = np.array([q.n_stars for q in results], dtype=float)
+    fwhm = np.array([q.fwhm for q in results])
+    ecc = np.array([q.ellipticity for q in results])
+    bg = np.array([q.background for q in results])
+
     def pct_rank(vals, invert=False):
         v = np.where(np.isfinite(vals), vals, np.nanmax(vals) if np.isfinite(vals).any() else 0)
         order = v.argsort()

@@ -29,7 +29,7 @@ from ..calib.masters import (
     subtract_dark,
 )
 from ..core.image import AstroImage
-from ..grade.metrics import FrameQuality, grade_frame
+from ..grade.metrics import FrameQuality, grade_frame, score_qualities
 from .register import Transform, pick_reference, register_frames, warp
 
 _CV_BAYER = {
@@ -135,6 +135,7 @@ def integrate(
         frames.append(img)
         qualities.append(grade_frame(img, path))
         _prog("calibrate", i + 1, len(light_paths))
+    score_qualities(qualities)
 
     # ------------------------------------------------------- quality filter
     kept_idx = list(range(len(frames)))
@@ -165,8 +166,7 @@ def integrate(
             else:
                 _log(f"REJECT {Path(str(light_paths[i])).name}: {', '.join(reasons)}")
         # best-N% cut by score
-        kept_idx.sort(key=lambda i: -(qualities[i].score or 0))
-        ranked = sorted(kept_idx, key=lambda i: -(qualities[i].n_stars))
+        ranked = sorted(kept_idx, key=lambda i: -(qualities[i].score or 0))
         n_keep = max(3, int(round(len(ranked) * best_fraction)))
         kept_idx = sorted(ranked[:n_keep])
     if len(kept_idx) < 1:
