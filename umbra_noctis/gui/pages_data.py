@@ -248,10 +248,11 @@ class GradePage(QWidget):
         if 0 <= row < len(self.state.qualities):
             q = self.state.qualities[row]
             try:
-                img = AstroImage.from_fits(q.path)
+                img = AstroImage.from_file(q.path)
                 self.canvas.set_image(img.data, keep_view=row > 0)
-            except Exception:
-                pass
+            except Exception as exc:
+                self.summary.setText(
+                    f"Could not load preview for {Path(q.path).name}: {exc}")
 
     def _set_accept(self, accepted: bool):
         row = self.table.currentRow()

@@ -221,6 +221,7 @@ class AstroImage:
         """Write to FITS. ``bits=16`` writes uint16 (interchange), 32 writes
         float32 (full precision, recommended for intermediates)."""
         path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
         data = self.data
         if data.ndim == 3:  # store color as 3×H×W cube, the FITS convention
             data = np.moveaxis(data, -1, 0)
