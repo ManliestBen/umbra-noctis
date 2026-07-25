@@ -107,7 +107,7 @@ class MainWindow(QMainWindow):
         if index >= 1 and self.state.session is None:
             self._nudge(0, "Pick a session first (double-click one in the Library).")
             return
-        if index >= 3 and self.state.stacked is None and index != 3:
+        if index >= 3 and self.state.stacked is None:
             self._nudge(2, "Stack the session first.")
             return
         self.stack_widget.setCurrentIndex(index)
