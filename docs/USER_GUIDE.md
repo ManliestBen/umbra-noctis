@@ -4,6 +4,13 @@ Every feature, explained. If you're brand new, read the
 [Processing Tutorial](PROCESSING_TUTORIAL.md) first — it walks one session
 from raw folder to finished JPEG. This guide is the reference you come back to.
 
+**The built-in guide.** Much of what's below is also available inside the
+app itself, offline: run `umbra guide` at the command line, or open Help →
+Guide in the desktop GUI. Its operation reference (equivalent to
+[OPERATIONS.md](OPERATIONS.md)) is generated live from the op registry, so
+it always matches what your installed version actually does even if this
+document lags behind.
+
 **Contents**
 
 1. [Getting your data off the Dwarf 3](#1-getting-your-data-off-the-dwarf-3)
@@ -15,10 +22,11 @@ from raw folder to finished JPEG. This guide is the reference you come back to.
 7. [Dual-band narrowband imaging](#7-dual-band-narrowband-imaging)
 8. [Recipes & the Auto pipeline](#8-recipes--the-auto-pipeline)
 9. [Planetary & lunar stacking](#9-planetary--lunar-stacking)
-10. [Plate solving & annotation](#10-plate-solving--annotation)
-11. [Exporting & sharing](#11-exporting--sharing)
-12. [Reproducibility: history & sidecars](#12-reproducibility-history--sidecars)
-13. [Data safety](#13-data-safety)
+10. [Star trails, meteors & nightscapes (DSLR)](#10-star-trails-meteors--nightscapes-dslr)
+11. [Plate solving & annotation](#11-plate-solving--annotation)
+12. [Exporting & sharing](#12-exporting--sharing)
+13. [Reproducibility: history & sidecars](#13-reproducibility-history--sidecars)
+14. [Data safety](#14-data-safety)
 
 ---
 
@@ -161,7 +169,7 @@ percentage of pixel samples the rejection removed.
 
 ## 6. Processing operations
 
-All 25 operations live in one registry; the GUI tool panels, the CLI, recipes,
+Every operation lives in one registry; the GUI tool panels, the CLI, recipes,
 and [OPERATIONS.md](OPERATIONS.md) (full parameter tables) are all generated
 from it. CLI syntax: `--op name:param=value,param=value`, repeatable and
 applied in order.
@@ -169,10 +177,12 @@ applied in order.
 **Recommended order** (the GUI tool tree is arranged this way):
 
 1. **Linear stage** — `background_extract` (gradient removal — do this
-   first, always), `background_neutralize`, `white_balance` (auto mode makes
-   the average star white), `scnr` (kill green cast), `denoise`
-   (starlet-wavelet with separate chroma strength), `deconvolve`
-   (Richardson–Lucy, PSF measured from your stars), `banding_reduce`.
+   first, always), `vignette_correct` (radial corner falloff — a DSLR-lens
+   companion to `background_extract`'s divide mode), `background_neutralize`,
+   `white_balance` (auto mode makes the average star white), `scnr` (kill
+   green cast), `denoise` (starlet-wavelet with separate chroma strength),
+   `deconvolve` (Richardson–Lucy, PSF measured from your stars),
+   `banding_reduce`.
 2. **Stretch** — one of `ghs` (most control: aim contrast at the faint
    stuff with `focus`, protect star cores with `protect_highlights`),
    `arcsinh` (best star colors), `histogram_stretch` (classic), or
@@ -183,7 +193,9 @@ applied in order.
    `local_contrast`, `hdr_compress` (rescue M42-core-style blowouts),
    `hue_shift`.
 4. **Geometry / cosmetic anytime** — `crop`, `rotate`, `flip`, `resize`,
-   `invert`, `clone_out` (heal residual trails and blemishes with inpainting).
+   `invert`, `clone_out` (heal residual trails and blemishes with inpainting),
+   `defringe` (neutralize purple/green chromatic-aberration halos next to
+   bright stars without touching star color elsewhere).
 
 Every operation's full documentation — what it does, when to use it, every
 parameter with ranges — is in [OPERATIONS.md](OPERATIONS.md) or
@@ -254,7 +266,56 @@ seeing changes frame to frame, so you keep only the lucky sharp frames.
 4. Aligned frames are averaged, then wavelet-sharpened (`sharpen`,
    scale=fine — the RegiStax trick).
 
-## 10. Plate solving & annotation
+## 10. Star trails, meteors & nightscapes (DSLR)
+
+All commands here read camera raw (CR2/CR3/NEF/ARW/DNG — install the `dslr`
+extra), JPEG, TIFF, PNG, and FITS, streaming so a 400-frame night needs the
+memory of about three frames. Frames sort by filename, which for camera
+numbering is shooting order.
+
+**Star trails — `umbra trails`.** Lighten (maximum) blending: no
+registration, so the stars' motion between frames paints the trails. The
+opposite of `umbra stack` — never deep-sky stack trail frames, alignment
+would erase them.
+
+```
+umbra trails ./night -o trails.jpg --darks ./darks
+```
+
+- `--darks DIR` — cap-on frames at identical settings → master dark. Without
+  darks, hot pixels are found statistically (bright in the per-pixel
+  *minimum* of all frames — stars move, defects don't) and repaired.
+- Gap filling is on by default: the small dark dashes the intervalometer's
+  re-arm time leaves in each trail are bridged after blending.
+  `--no-gap-fill` for the strict classic look.
+- `--fade 0.01` — comet-tail effect: the trail's past dims by 1% per frame,
+  so each star ends in a bright head with a fading tail.
+- `--foreground base.tif` — also writes the *mean* of every frame: a
+  noise-free landscape to blend under the trails in an editor.
+
+**Meteor scan — `umbra meteor-scan`.** Finds the handful of frames in a
+night that actually contain a streak:
+
+```
+umbra meteor-scan ./night --copy-to keepers/ --annotate previews/
+```
+
+Each frame's luminance is compared against the maximum of its two neighbors —
+everything static or slowly drifting cancels; what survives existed in one
+frame only. Streaks are extracted with a Hough transform, and streaks that
+continue along the same line in adjacent frames are reclassified
+`satellite` (meteors live and die inside a single exposure; satellites and
+aircraft cross many). `--sigma 4` scans more aggressively, `--min-length`
+sets the shortest streak worth reporting, `--json report.json` for scripting.
+
+**Meteor composite.** Cull to the keepers, then blend with star-field
+alignment so every meteor lands on one fixed sky:
+
+```
+umbra trails ./keepers -o meteors.tif --align
+```
+
+## 11. Plate solving & annotation
 
 `umbra solve image.fits --annotate labeled.jpg`
 
@@ -268,7 +329,7 @@ A successful solve reports field center RA/Dec, scale, and rotation, and
 `--annotate` renders labels for every bundled catalog object in the field
 (Messier + famous NGC/IC, with friendly names).
 
-## 11. Exporting & sharing
+## 12. Exporting & sharing
 
 - **Formats:** 16-bit TIFF (further editing), 16-bit PNG (mono) / 8-bit PNG
   (color), JPEG with quality control (sharing), 32-bit FITS (archival, full
@@ -284,7 +345,7 @@ A successful solve reports field center RA/Dec, scale, and rotation, and
 - **Resize on export:** `export_image(..., resize_long_edge=2048)` for
   web-friendly files (downsizing is also free noise reduction).
 
-## 12. Reproducibility: history & sidecars
+## 13. Reproducibility: history & sidecars
 
 Every `AstroImage` carries a `history` list — every operation and its exact
 parameters, timestamped. It survives into FITS headers (HISTORY cards), can
@@ -292,7 +353,7 @@ be dumped as JSON (`history_json()`), and can be converted straight back into
 a runnable recipe (`Recipe.from_history`). Two years from now you'll be able
 to answer "how did I process this?" — and re-run it on better data.
 
-## 13. Data safety
+## 14. Data safety
 
 - Raw session folders are **read-only** to the entire pipeline.
 - Grading/rejection only mark frames; nothing is ever deleted.

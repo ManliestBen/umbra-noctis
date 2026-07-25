@@ -41,8 +41,9 @@ def build_star_mask(img: AstroImage, grow: float = 2.0,
 def star_reduce(img: AstroImage, amount: float = 0.5, grow: float = 2.0) -> AstroImage:
     """Shrink stars so the nebula/galaxy becomes the subject. Morphological
     erosion blended in only under a star mask — the background is untouched.
-    Run AFTER stretching. For full removal, use an external StarNet++/GraXpert
-    via `umbra integrate-tool` (see docs)."""
+    Run AFTER stretching. For full star removal, export a 16-bit TIFF
+    (umbra process ... -o starless-input.tif), run an external
+    StarNet++/GraXpert on it, and re-import the result."""
     if amount <= 0:
         return img.copy()
     mask = build_star_mask(img, grow=grow)

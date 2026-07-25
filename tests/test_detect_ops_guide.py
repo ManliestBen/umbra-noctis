@@ -1,13 +1,15 @@
 """Meteor scanner, new editing ops, trail upgrades, and the built-in guide —
 all verified against synthetic ground truth."""
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 import pytest
 
 import umbra_noctis.process  # noqa: F401 — registers ops
 from umbra_noctis.core.image import AstroImage
-from umbra_noctis.core.ops import apply_op
+from umbra_noctis.core.ops import OPS, apply_op
 from umbra_noctis.detect import scan_for_meteors
 from umbra_noctis.stack.trails import trail_stack
 
@@ -146,9 +148,17 @@ def test_guide_covers_every_command_and_new_features():
         assert feature in text, f"guide never mentions {feature}"
     assert len(topics()) >= 7
     # generated ops reference stays in sync with the registry
-    from umbra_noctis.core.ops import OPS
     ops_text = render("ops")
     for name in OPS:
         assert f"`{name}`" in ops_text
     with pytest.raises(KeyError):
         render("no-such-topic")
+
+
+def test_operations_doc_covers_every_op():
+    """docs/OPERATIONS.md is a hand-committed snapshot of `umbra ops
+    --markdown` — pin it against the live registry so it can't go stale
+    again the way it did before (missing defringe/vignette_correct)."""
+    ops_doc = (Path(__file__).parent.parent / "docs" / "OPERATIONS.md").read_text()
+    for name in OPS:
+        assert f"`{name}`" in ops_doc, f"docs/OPERATIONS.md is stale: missing {name}"
