@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
-from scipy import ndimage
 
 from ..core.image import AstroImage
 from ..core.ops import Param, register_op
@@ -180,7 +179,8 @@ def clone_out(img: AstroImage, x: int = 0, y: int = 0, radius: int = 12,
         xs_src = np.clip(xs + dx, 0, w - 1)
         feather = np.clip((radius - dist[ys, xs]) / max(radius * 0.3, 1), 0, 1)
         if data.ndim == 3:
-            data[ys, xs] = data[ys, xs] * (1 - feather[:, None]) + data[ys_src, xs_src] * feather[:, None]
+            data[ys, xs] = (data[ys, xs] * (1 - feather[:, None])
+                             + data[ys_src, xs_src] * feather[:, None])
         else:
             data[ys, xs] = data[ys, xs] * (1 - feather) + data[ys_src, xs_src] * feather
     return img.with_data(np.clip(data, 0.0, 1.0))

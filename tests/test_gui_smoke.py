@@ -54,9 +54,10 @@ def test_canvas_displays_images(app):
 
 
 def test_process_page_param_generation(app):
+    from PySide6.QtCore import Qt
+
     from umbra_noctis.gui.pages_process import ProcessPage
     from umbra_noctis.gui.state import AppState
-    from PySide6.QtCore import Qt
 
     state = AppState()
     base = make_star_field(100, 140)
@@ -85,10 +86,10 @@ def test_process_page_param_generation(app):
 
 
 def test_grade_and_stack_pages(app, tmp_path):
+    from umbra_noctis.grade import grade_session
     from umbra_noctis.gui.pages_data import GradePage
     from umbra_noctis.gui.pages_process import StackPage
     from umbra_noctis.gui.state import AppState
-    from umbra_noctis.grade import grade_session
 
     light_dir, dark_dir = write_demo_session(tmp_path, n_lights=4, n_darks=2)
     state = AppState()

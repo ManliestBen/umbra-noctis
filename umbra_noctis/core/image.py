@@ -13,9 +13,9 @@ from __future__ import annotations
 import copy as _copy
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from astropy.io import fits
@@ -60,11 +60,11 @@ class AstroImage:
 
     data: np.ndarray
     meta: dict = field(default_factory=dict)
-    fits_header: Optional[fits.Header] = None
-    cfa: Optional[str] = None  # e.g. "RGGB" when data is a raw CFA mosaic
+    fits_header: fits.Header | None = None
+    cfa: str | None = None  # e.g. "RGGB" when data is a raw CFA mosaic
     linear: bool = True
     history: list = field(default_factory=list)
-    source_path: Optional[Path] = None
+    source_path: Path | None = None
 
     # ------------------------------------------------------------------ shape
     @property
@@ -88,7 +88,7 @@ class AstroImage:
 
     # ------------------------------------------------------------------- I/O
     @classmethod
-    def from_fits(cls, path: str | Path) -> "AstroImage":
+    def from_fits(cls, path: str | Path) -> AstroImage:
         """Load a FITS file (Dwarf 3 sub, master, or stacked result).
 
         Integer data is scaled to [0, 1] by its dtype range. 3-plane cubes
@@ -140,7 +140,7 @@ class AstroImage:
         )
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "AstroImage":
+    def from_file(cls, path: str | Path) -> AstroImage:
         """Load any supported frame: FITS, camera raw (CR2/CR3/NEF/ARW/DNG/...),
         JPEG, PNG, or TIFF. This is the loader every pipeline should use so
         that DSLR frames work everywhere Dwarf 3 FITS frames do.
@@ -156,7 +156,7 @@ class AstroImage:
         raise ValueError(f"Unsupported frame format '{suffix}' ({path})")
 
     @classmethod
-    def _from_camera_raw(cls, path: Path) -> "AstroImage":
+    def _from_camera_raw(cls, path: Path) -> AstroImage:
         """Decode a DSLR/mirrorless raw file to linear RGB via rawpy/libraw."""
         try:
             import rawpy
@@ -174,11 +174,11 @@ class AstroImage:
         return img
 
     @classmethod
-    def _from_image_file(cls, path: Path) -> "AstroImage":
+    def _from_image_file(cls, path: Path) -> AstroImage:
         """Load a JPEG/PNG/TIFF. Display-referred formats are flagged
         non-linear; EXIF exposure/ISO is carried into ``meta`` when present."""
-        from PIL import Image
         import tifffile
+        from PIL import Image
 
         suffix = path.suffix.lower()
         meta: dict[str, Any] = {}
@@ -250,7 +250,7 @@ class AstroImage:
         return path
 
     # -------------------------------------------------------------- lineage
-    def copy(self) -> "AstroImage":
+    def copy(self) -> AstroImage:
         return AstroImage(
             data=self.data.copy(),
             meta=dict(self.meta),
@@ -261,7 +261,7 @@ class AstroImage:
             source_path=self.source_path,
         )
 
-    def with_data(self, data: np.ndarray, **changes) -> "AstroImage":
+    def with_data(self, data: np.ndarray, **changes) -> AstroImage:
         """New image with replaced pixels; metadata/history carried forward."""
         img = self.copy()
         img.data = np.ascontiguousarray(data.astype(np.float32))
@@ -273,7 +273,7 @@ class AstroImage:
         self.history.append({
             "op": op,
             "params": params,
-            "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "time": datetime.now(UTC).isoformat(timespec="seconds"),
         })
 
     def history_json(self) -> str:

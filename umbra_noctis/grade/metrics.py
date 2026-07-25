@@ -125,7 +125,7 @@ def grade_session(frames: list[str | Path], k: float = 3.5,
              + 0.30 * pct_rank(fwhm, invert=True)
              + 0.20 * pct_rank(ecc, invert=True)
              + 0.15 * pct_rank(bg, invert=True))
-    for q, s in zip(results, score):
+    for q, s in zip(results, score, strict=False):
         q.score = round(float(s) * 100, 1)
     return results
 

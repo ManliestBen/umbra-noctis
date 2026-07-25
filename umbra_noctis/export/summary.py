@@ -28,11 +28,11 @@ def acquisition_caption(sessions: list[DwarfSession], n_used: int | None = None)
     lines = [
         f"{target['display']}",
         "",
-        f"Telescope: DwarfLab Dwarf 3 (150 mm f/4.3, IMX678)",
+        "Telescope: DwarfLab Dwarf 3 (150 mm f/4.3, IMX678)",
         f"Frames: {n_used or frames} × {exp:g}s @ gain {gain}"
         + (f" across {nights} night(s)" if nights > 1 else ""),
         f"Integration: {hours}h {mins:02d}m",
-        f"Processed with Umbra Noctis",
+        "Processed with Umbra Noctis",
     ]
     return "\n".join(lines)
 

@@ -33,7 +33,9 @@ AUTO_RECIPE_STEPS = [
 ]
 
 
-def find_matching_darks(session: DwarfSession, search_root: Path | None = None) -> DwarfSession | None:
+def find_matching_darks(
+    session: DwarfSession, search_root: Path | None = None
+) -> DwarfSession | None:
     """Look for a dark session with the same exposure and gain near the lights."""
     root = search_root or session.path.parent
     try:

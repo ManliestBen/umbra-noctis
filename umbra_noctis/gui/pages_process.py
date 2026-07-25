@@ -5,15 +5,32 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox,
-                               QFileDialog, QFormLayout, QGroupBox,
-                               QHBoxLayout, QLabel, QLineEdit, QListWidget,
-                               QMessageBox, QPlainTextEdit, QProgressBar,
-                               QPushButton, QScrollArea, QSpinBox, QSplitter,
-                               QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-                               QWidget)
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QSplitter,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 import umbra_noctis.process  # noqa: F401 — register ops
+
 from ..calib.masters import build_master
 from ..core.ops import OPS, apply_op
 from ..export.summary import acquisition_caption
@@ -305,7 +322,8 @@ class ProcessPage(QWidget):
             w.setRange(p.lo if p.lo is not None else -1e6,
                        p.hi if p.hi is not None else 1e6)
             w.setDecimals(3)
-            w.setSingleStep(((p.hi - p.lo) / 50) if (p.lo is not None and p.hi is not None) else 0.1)
+            has_bounds = p.lo is not None and p.hi is not None
+            w.setSingleStep(((p.hi - p.lo) / 50) if has_bounds else 0.1)
             w.setValue(float(p.default or 0))
             return w
         if p.kind == "int":

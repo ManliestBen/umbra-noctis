@@ -23,7 +23,6 @@ except ImportError:  # pragma: no cover
     _HAVE_AA = False
 
 from ..core.image import AstroImage
-from ..grade.stars import detect_stars
 
 
 @dataclass
@@ -38,7 +37,7 @@ class Transform:
     n_matched: int = 0
 
     @classmethod
-    def identity(cls) -> "Transform":
+    def identity(cls) -> Transform:
         return cls(0.0, 1.0, 0.0, 0.0, np.eye(3), "identity")
 
 

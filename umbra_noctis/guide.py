@@ -225,6 +225,7 @@ def render(topic: str = "all") -> str:
     title, body = _TOPICS[topic]
     if body is None:  # generated topics
         import umbra_noctis.process  # noqa: F401 — registers every op
+
         from .core.ops import ops_markdown
         return ops_markdown()
     return body.strip()

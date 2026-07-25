@@ -92,8 +92,8 @@ def cmd_library(args):
 
 
 def cmd_grade(args):
-    from .ingest import parse_session
     from .grade import grade_session
+    from .ingest import parse_session
     s = parse_session(args.session)
     print(f"Grading {s.frame_count} frames of {s.target or s.path.name} ...")
     results = grade_session(s.lights, progress=lambda d, t: _progress_printer("grade", d, t))
@@ -160,6 +160,7 @@ def cmd_auto(args):
 
 def cmd_process(args):
     import umbra_noctis.process  # noqa: F401
+
     from .core.image import AstroImage
     from .core.ops import apply_op
     from .export import export_image
@@ -197,6 +198,7 @@ def cmd_process(args):
 
 def cmd_ops(args):
     import umbra_noctis.process  # noqa: F401
+
     from .core.ops import OPS, ops_markdown
     if args.markdown:
         print(ops_markdown())
@@ -221,9 +223,11 @@ def cmd_solve(args):
     if not result.success:
         print(f"Solve failed: {result.message}")
         sys.exit(1)
+    rotation = (f"  rotation {result.rotation_deg:.1f} deg"
+                if result.rotation_deg is not None else "")
     print(f"Solved by {result.solver}: RA {result.ra_deg:.4f}  Dec {result.dec_deg:.4f}"
           + (f"  scale {result.scale_arcsec:.2f}\"/px" if result.scale_arcsec else "")
-          + (f"  rotation {result.rotation_deg:.1f} deg" if result.rotation_deg is not None else ""))
+          + rotation)
     if args.annotate:
         img = AstroImage.from_fits(args.input)
         out, objs = annotate_image(img, result, args.annotate)
@@ -233,10 +237,11 @@ def cmd_solve(args):
 
 
 def cmd_planetary(args):
+    import umbra_noctis.process  # noqa: F401
+
     from .core.ops import apply_op
     from .export import export_image
     from .planetary import lucky_stack
-    import umbra_noctis.process  # noqa: F401
 
     result = lucky_stack(args.video, keep_fraction=args.keep,
                          progress=_progress_printer)
@@ -293,6 +298,7 @@ def cmd_trails(args):
 
 def cmd_meteor_scan(args):
     import shutil
+
     from .detect import scan_for_meteors
     from .detect.meteors import annotate_scan
     from .stack.trails import collect_frames

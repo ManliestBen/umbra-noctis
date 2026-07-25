@@ -6,7 +6,7 @@ from umbra_noctis.core.image import AstroImage
 from umbra_noctis.core.ops import OPS, apply_op
 from umbra_noctis.export import export_image, save_comparison
 from umbra_noctis.process.display import auto_stretch_display
-from umbra_noctis.recipes import Recipe, run_recipe, auto_process
+from umbra_noctis.recipes import Recipe, auto_process, run_recipe
 from umbra_noctis.synth import make_star_field, write_demo_session
 
 

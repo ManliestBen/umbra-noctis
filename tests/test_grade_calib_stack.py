@@ -2,8 +2,13 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from umbra_noctis.calib import (build_master, cosmetic_correction, hot_pixel_map,
-                                subtract_dark, synthetic_flat)
+from umbra_noctis.calib import (
+    build_master,
+    cosmetic_correction,
+    hot_pixel_map,
+    subtract_dark,
+    synthetic_flat,
+)
 from umbra_noctis.core.image import AstroImage
 from umbra_noctis.grade import grade_session
 from umbra_noctis.ingest import parse_session
