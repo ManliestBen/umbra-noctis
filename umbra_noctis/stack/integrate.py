@@ -87,6 +87,7 @@ def integrate(
     normalize: bool = True,
     drizzle: float = 1.0,
     strip_rows: int = 128,
+    qualities: list[FrameQuality] | None = None,
     progress=None,
     log=None,
 ) -> StackResult:
@@ -94,6 +95,9 @@ def integrate(
 
     ``drizzle=2.0`` integrates onto a 2× grid (needs many well-dithered subs).
     ``progress(stage, done, total)`` and ``log(str)`` are optional callbacks.
+    ``qualities``, if given, must be the same length and order as
+    ``light_paths`` (e.g. already computed by a Grade step) — supplying it
+    skips re-grading every frame from scratch.
     """
     logs: list[str] = []
 
@@ -120,8 +124,14 @@ def integrate(
         hot_map = hot_pixels_from_lights(light_paths)
         _log(f"No dark — statistical hot-pixel map from lights: {int(hot_map.sum())} pixels")
 
+    qualities_supplied = qualities is not None
+    if qualities_supplied and len(qualities) != len(light_paths):
+        raise ValueError(
+            f"qualities has {len(qualities)} entries but light_paths has "
+            f"{len(light_paths)} — they must be the same length and order")
+
     frames: list[AstroImage] = []
-    qualities: list[FrameQuality] = []
+    qualities = list(qualities) if qualities_supplied else []
     for i, path in enumerate(light_paths):
         img = AstroImage.from_file(path)
         if master_dark is not None:
@@ -133,9 +143,11 @@ def integrate(
         if img.cfa:
             img = demosaic(img, demosaic_method)
         frames.append(img)
-        qualities.append(grade_frame(img, path))
+        if not qualities_supplied:
+            qualities.append(grade_frame(img, path))
         _prog("calibrate", i + 1, len(light_paths))
-    score_qualities(qualities)
+    if not qualities_supplied:
+        score_qualities(qualities)
 
     # ------------------------------------------------------- quality filter
     kept_idx = list(range(len(frames)))

@@ -128,7 +128,9 @@ class StackPage(QWidget):
     def run_stack(self):
         if not self.state.session:
             return
-        accepted = [q.path for q in self.state.qualities if q.accepted] \
+        accepted_qualities = [q for q in self.state.qualities if q.accepted] \
+            if self.state.qualities else []
+        accepted = [q.path for q in accepted_qualities] \
             if self.state.qualities else list(self.state.session.lights)
         if len(accepted) < 2:
             QMessageBox.warning(self, "Not enough frames",
@@ -147,6 +149,7 @@ class StackPage(QWidget):
             rejection_sigma=self.sigma.value(),
             best_fraction=self.best.value() / 100.0,
             quality_filter=False,  # user already graded by hand
+            qualities=accepted_qualities or None,  # reuse the Grade page's scores
             drizzle=drizzle)
         self.worker.progressed.connect(self._progress)
         self.worker.logged.connect(self.log.appendPlainText)
