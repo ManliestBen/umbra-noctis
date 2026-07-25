@@ -91,6 +91,33 @@ def test_build_master_sigma_clip(tmp_path):
     assert abs(float(master.data[10, 10]) - 0.05) < 0.02  # outlier rejected
 
 
+def test_build_master_mixed_shapes_raises(tmp_path):
+    p1 = tmp_path / "a.fits"
+    p2 = tmp_path / "b.fits"
+    fits.PrimaryHDU(np.full((40, 40), 6553, dtype=np.uint16)).writeto(p1)
+    fits.PrimaryHDU(np.full((30, 30), 6553, dtype=np.uint16)).writeto(p2)
+    with pytest.raises(ValueError, match="b.fits"):
+        build_master([str(p1), str(p2)])
+
+
+def test_build_master_all_rejected_pixel_falls_back_to_median(tmp_path):
+    h, w = 20, 20
+    paths = []
+    for i in range(8):
+        f = np.full((h, w), 0.1, dtype=np.float32)
+        f[5, 5] = 1.0 if i % 2 == 0 else 0.0  # alternating extremes, exact 50/50 split
+        p = tmp_path / f"c{i}.fits"
+        fits.PrimaryHDU((np.clip(f, 0, 1) * 65535).astype(np.uint16)).writeto(p)
+        paths.append(str(p))
+    # For a perfectly symmetric 50/50 split every sample's z-score (relative
+    # to the population std) is exactly 1.0 — sigma=0.5 rejects all of them
+    # at that pixel, exercising the "everything rejected" fallback.
+    master = build_master(paths, method="sigma_clip", sigma=0.5)
+    assert abs(float(master.data[5, 5]) - 0.5) < 0.02, \
+        "an all-rejected pixel should fall back to the median (0.5), not go to 0"
+    assert abs(float(master.data[0, 0]) - 0.1) < 0.01  # unaffected background
+
+
 def test_synthetic_flat_flattens_vignette():
     yy, xx = np.mgrid[0:200, 0:300]
     r2 = ((xx - 150) / 150.0) ** 2 + ((yy - 100) / 100.0) ** 2
