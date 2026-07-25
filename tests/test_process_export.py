@@ -1,10 +1,13 @@
+import json
+
 import numpy as np
 import pytest
 
 import umbra_noctis.process  # noqa: F401 — registers ops
 from umbra_noctis.core.image import AstroImage
 from umbra_noctis.core.ops import OPS, apply_op
-from umbra_noctis.export import export_image, save_comparison
+from umbra_noctis.export import acquisition_caption, export_image, save_comparison
+from umbra_noctis.ingest.session import DwarfSession
 from umbra_noctis.process.display import auto_stretch_display
 from umbra_noctis.recipes import Recipe, auto_process, run_recipe
 from umbra_noctis.synth import make_star_field, write_demo_session
@@ -109,6 +112,19 @@ def test_curves_and_saturation():
     assert chroma > chroma0
 
 
+def test_curves_rejects_malformed_points():
+    img = _color_img()
+    with pytest.raises(ValueError, match="points must look like"):
+        apply_op(img, "curves", points="not-a-point-list")
+    with pytest.raises(ValueError, match="points must look like"):
+        apply_op(img, "curves", points="0,0,0;1,1")  # too many values in a chunk
+    with pytest.raises(ValueError, match="at least 2 control points"):
+        apply_op(img, "curves", points="0.5,0.5")  # only one point
+    # Duplicate x values are deduped (last wins), not a crash.
+    out = apply_op(img, "curves", points="0,0;0.5,0.2;0.5,0.6;1,1")
+    assert out.data.shape == img.data.shape
+
+
 def test_recipe_roundtrip(tmp_path):
     img = _color_img()
     recipe = Recipe(name="test", steps=[
@@ -141,6 +157,16 @@ def test_export_formats(tmp_path):
     assert cmp_path.exists()
 
 
+def test_acquisition_caption_handles_missing_exposure_and_gain(tmp_path):
+    """exposure_s/gain can be None (malformed folder name, missing
+    shotsInfo field) — the caption must degrade to '?' instead of
+    crashing on `f"{None:g}"`."""
+    s = DwarfSession(path=tmp_path, target="M42", exposure_s=None, gain=None)
+    caption = acquisition_caption([s])
+    assert "?s @ gain ?" in caption
+    assert "None" not in caption
+
+
 def test_display_autostretch_visibility():
     img = _color_img()
     disp = auto_stretch_display(img.data)
@@ -161,3 +187,23 @@ def test_auto_process_end_to_end(tmp_path):
     # the darks folder next to the lights must have been found automatically
     assert any(h["op"] == "subtract_dark" for h in img.history), \
         "auto pipeline should have found and subtracted the darks next door"
+
+
+def test_auto_output_name_is_sanitized(tmp_path):
+    """session.target comes from untrusted metadata — a folder name can't
+    contain "/", but shotsInfo.json's "target" field can. The output
+    filename must be slugified so a malicious target can't write outside
+    out_dir."""
+    light_dir, _ = write_demo_session(tmp_path / "session", n_lights=5, n_darks=0)
+    info_path = light_dir / "shotsInfo.json"
+    info = json.loads(info_path.read_text())
+    info["target"] = "../../evil/../../etc/passwd"
+    info_path.write_text(json.dumps(info))
+
+    out_dir = tmp_path / "out"
+    _, _, exported = auto_process(light_dir, out_dir, export_formats=("jpg",))
+    assert len(exported) == 1
+    for p in exported:
+        assert out_dir.resolve() in p.resolve().parents
+        assert ".." not in p.name
+        assert "/" not in p.name

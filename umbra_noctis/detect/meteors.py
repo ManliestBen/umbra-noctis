@@ -139,6 +139,18 @@ def scan_for_meteors(paths: list[str | Path], min_length: float = 40.0,
 
     prev_lum, scale = _luminance_small(paths[0], max_width)
     cur_lum, _ = _luminance_small(paths[1], max_width)
+
+    # Frame 0 has no frame before it — compared against its one neighbor
+    # (frame 1) alone, instead of being structurally unscannable forever.
+    if prev_lum.shape == cur_lum.shape:
+        residual0 = prev_lum - cur_lum
+        results[0].streaks = _find_streaks(residual0, scale, k_sigma, min_length)
+        if results[0].streaks:
+            results[0].verdict = "meteor"
+    elif log:
+        log(f"SKIP shape mismatch: {paths[0].name} {prev_lum.shape} != "
+            f"{paths[1].name} {cur_lum.shape}")
+
     for i in range(1, len(paths) - 1):
         next_lum, _ = _luminance_small(paths[i + 1], max_width)
         if cur_lum.shape == prev_lum.shape == next_lum.shape:
@@ -146,11 +158,27 @@ def scan_for_meteors(paths: list[str | Path], min_length: float = 40.0,
             results[i].streaks = _find_streaks(residual, scale, k_sigma, min_length)
             if results[i].streaks:
                 results[i].verdict = "meteor"
+        elif log:
+            log(f"SKIP shape mismatch at frame {i} ({paths[i].name}): "
+                f"prev={prev_lum.shape} cur={cur_lum.shape} next={next_lum.shape}")
         prev_lum, cur_lum = cur_lum, next_lum
         if progress:
             progress("scan", i + 1, len(paths))
     if progress:
         progress("scan", len(paths), len(paths))
+
+    # Last frame has no frame after it — same single-neighbor treatment,
+    # using the values the streaming loop above already holds: cur_lum is
+    # now the last frame's luminance, prev_lum the one before it.
+    last = len(paths) - 1
+    if prev_lum.shape == cur_lum.shape:
+        residual_last = cur_lum - prev_lum
+        results[last].streaks = _find_streaks(residual_last, scale, k_sigma, min_length)
+        if results[last].streaks:
+            results[last].verdict = "meteor"
+    elif log:
+        log(f"SKIP shape mismatch: {paths[last - 1].name} {prev_lum.shape} != "
+            f"{paths[last].name} {cur_lum.shape}")
 
     # Satellite/aircraft pass: a streak whose line continues in an adjacent
     # frame is a track, not a meteor.
@@ -189,6 +217,8 @@ def annotate_scan(scan: FrameScan, out_path: str | Path) -> Path:
     out_path = Path(out_path)
     export_image(img, out_path, resize_long_edge=2000)
     jpeg = cv2.imread(str(out_path))
+    if jpeg is None:
+        raise RuntimeError(f"could not re-read {out_path} for annotation")
     f = max(jpeg.shape[:2]) / max(img.height, img.width)
     for s in scan.streaks:
         p0 = (int(s.x0 * f), int(s.y0 * f))

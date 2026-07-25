@@ -32,6 +32,7 @@ def export_image(img: AstroImage, path: str | Path, quality: int = 92,
     with ``autostretch_if_linear=False`` if you really want a black JPEG).
     """
     path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     suffix = path.suffix.lower()
     data = img.data
 

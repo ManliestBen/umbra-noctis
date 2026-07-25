@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -140,10 +141,7 @@ def cmd_stack(args):
         work_dir=out.parent,
         progress=_progress_printer, log=lambda m: print("  " + m))
 
-    if out.suffix.lower() in (".fits", ".fit"):
-        result.image.save_fits(out)
-    else:
-        export_image(result.image, out)
+    export_image(result.image, out)
     print(f"\nStacked {result.n_used} frames "
           f"({result.n_rejected_frames} rejected) -> {out}")
     print(f"Next: umbra process {out} -o final.jpg --auto-finish")
@@ -168,7 +166,7 @@ def cmd_process(args):
     from .recipes import Recipe, run_recipe
     from .recipes.auto import AUTO_RECIPE_STEPS
 
-    img = AstroImage.from_fits(args.input)
+    img = AstroImage.from_file(args.input)
     if args.recipe:
         img = run_recipe(img, Recipe.load(args.recipe),
                          progress=lambda d, t, op: print(f"  [{d}/{t}] {op}"))
@@ -187,10 +185,7 @@ def cmd_process(args):
         img = apply_op(img, name, **params)
 
     out = Path(args.output)
-    if out.suffix.lower() in (".fits", ".fit"):
-        img.save_fits(out)
-    else:
-        export_image(img, out)
+    export_image(img, out)
     print(f"-> {out}")
     if args.save_recipe:
         Recipe.from_history(img, Path(args.save_recipe).stem).save(args.save_recipe)
@@ -224,13 +219,18 @@ def cmd_solve(args):
     if not result.success:
         print(f"Solve failed: {result.message}")
         sys.exit(1)
+    if result.ra_deg is None or result.dec_deg is None:
+        # Belt-and-braces: a solver could in principle report success without
+        # coordinates; treat that as a failure rather than crash formatting None.
+        print(f"Solve reported success but returned no coordinates ({result.solver})")
+        sys.exit(1)
     rotation = (f"  rotation {result.rotation_deg:.1f} deg"
                 if result.rotation_deg is not None else "")
     print(f"Solved by {result.solver}: RA {result.ra_deg:.4f}  Dec {result.dec_deg:.4f}"
           + (f"  scale {result.scale_arcsec:.2f}\"/px" if result.scale_arcsec else "")
           + rotation)
     if args.annotate:
-        img = AstroImage.from_fits(args.input)
+        img = AstroImage.from_file(args.input)
         out, objs = annotate_image(img, result, args.annotate)
         print(f"Annotated ({len(objs)} objects) -> {out}")
         for o in objs:
@@ -278,20 +278,14 @@ def cmd_trails(args):
     result = trail_stack(
         frames, master_dark=master_dark, align=args.align,
         cosmetic=not args.no_cosmetic, fade=args.fade,
-        fill_gaps=not args.no_gap_fill,
+        fill_gaps=not args.no_gap_fill, want_mean=bool(args.foreground),
         progress=_progress_printer, log=lambda m: print("  " + m))
 
     out = Path(args.output)
-    if out.suffix.lower() in (".fits", ".fit"):
-        result.image.save_fits(out)
-    else:
-        export_image(result.image, out)
+    export_image(result.image, out)
     if args.foreground and result.mean_image is not None:
         fg = Path(args.foreground)
-        if fg.suffix.lower() in (".fits", ".fit"):
-            result.mean_image.save_fits(fg)
-        else:
-            export_image(result.mean_image, fg)
+        export_image(result.mean_image, fg)
         print(f"  noise-free foreground (mean of all frames) -> {fg}")
     print(f"\nBlended {result.n_frames} frames "
           f"({result.n_skipped} skipped) -> {out}")
@@ -512,7 +506,15 @@ def main(argv=None):
     if not getattr(args, "func", None):
         parser.print_help()
         return
-    args.func(args)
+    try:
+        args.func(args)
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as exc:
+        if os.environ.get("UMBRA_DEBUG"):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

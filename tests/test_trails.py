@@ -67,6 +67,20 @@ def test_master_dark_subtraction(tmp_path):
     assert result.image.data[24, 10] > 0.5
 
 
+def test_dark_mismatch_logged(tmp_path):
+    """A master dark whose shape doesn't match the frames must log once
+    (not once per frame) instead of silently skipping dark subtraction."""
+    paths = _write_session(tmp_path, n=4)
+    wrong_shape_dark = AstroImage(data=np.zeros((H + 10, W + 10), dtype=np.float32))
+    result = trail_stack(paths, master_dark=wrong_shape_dark, cosmetic=False)
+    mismatch_lines = [m for m in result.log if "dark subtraction skipped" in m]
+    assert len(mismatch_lines) == 1
+    assert str(wrong_shape_dark.data.shape) in mismatch_lines[0]
+    assert str((H, W)) in mismatch_lines[0]
+    # the un-subtracted hot pixel still made it into the trail untouched
+    assert result.image.data[HOT] > 0.5
+
+
 def test_mixed_formats_and_collect(tmp_path):
     _write_session(tmp_path, n=3, fmt="png")
     (tmp_path / "notes.txt").write_text("x")
