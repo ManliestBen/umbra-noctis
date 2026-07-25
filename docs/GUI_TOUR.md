@@ -5,6 +5,9 @@ side. The steps are a guided path — each one hands off to the next — but onc
 a step has data you can jump back and forth freely. A red night-vision theme
 is in **View → Red night-vision mode** for processing at the telescope.
 
+Star trails, meteor scanning, and nightscape composites (DSLR workflows) are
+currently CLI-only — see [USER_GUIDE.md §10](USER_GUIDE.md#10-star-trails-meteors--nightscapes-dslr).
+
 ---
 
 ## 1 · Library

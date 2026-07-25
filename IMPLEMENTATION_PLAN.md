@@ -10,7 +10,7 @@ with a recommended stack, architecture, and phase-by-phase milestones.
 
 ## 1. Recommended Technology Stack
 
-**Core language: Python 3.12+.** The entire scientific-astronomy ecosystem is here, and
+**Core language: Python 3.11+.** The entire scientific-astronomy ecosystem is here, and
 it turns months of algorithm work into library calls:
 
 | Concern | Library |
@@ -72,6 +72,7 @@ where we can do better or reduce friction.
 │  solve/     plate solving, annotation, photometry      │
 │  export/    formats, crops, summary cards, timelapse   │
 │  integrate/ siril, graxpert, astrometry.net adapters   │
+│             (planned — not yet built)                  │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -214,7 +215,7 @@ Pick order based on what you find yourself wanting after a month of real use:
 
 ## 6. Immediate Next Steps
 
-1. Confirm stack choice (Python + PySide6) — or flag if you'd rather go web-based.
-2. Scaffold the repo (Phase 0 layout, tooling, CI).
-3. Shoot/collect the ground-truth sessions off your Dwarf 3 and archive them.
-4. Build `ingest/` against your real session folders.
+This plan is complete through Phase 5 (see the Status line at the top).
+`FEATURES.md` — with its "(Shipped as ...)" annotations marking what from
+this plan actually landed and under what name — is the living roadmap for
+what comes next; this document is kept as historical design record.

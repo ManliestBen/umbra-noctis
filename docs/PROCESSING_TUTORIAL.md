@@ -163,6 +163,10 @@ umbra process any_other_stack.fits -o out.jpg --recipe m42-look.json
 5. **Export** — save JPEG/TIFF, export a before/after, copy the generated
    caption.
 
+Shooting a wide-angle nightscape instead of a deep-sky session? That's a
+different workflow (no stacking/registration) — see
+[USER_GUIDE.md §10](USER_GUIDE.md#10-star-trails-meteors--nightscapes-dslr).
+
 ## Troubleshooting quick hits
 
 | Symptom | Fix |
