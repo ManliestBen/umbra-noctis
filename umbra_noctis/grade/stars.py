@@ -7,6 +7,8 @@ Returns a structured array with columns: x, y, flux, fwhm, ellipticity.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 from scipy import ndimage
 
@@ -19,6 +21,8 @@ except ImportError:  # pragma: no cover
 _DTYPE = np.dtype([("x", "f8"), ("y", "f8"), ("flux", "f8"),
                    ("fwhm", "f8"), ("ellipticity", "f8")])
 
+_warned_no_sep = False
+
 
 def _luminance(data: np.ndarray) -> np.ndarray:
     if data.ndim == 3:
@@ -30,12 +34,18 @@ def _luminance(data: np.ndarray) -> np.ndarray:
 def detect_stars(data: np.ndarray, threshold_sigma: float = 5.0,
                  max_stars: int = 500) -> np.ndarray:
     """Detect point sources; brightest ``max_stars`` returned, flux-sorted."""
+    global _warned_no_sep
     lum = _luminance(data)
     if _HAVE_SEP:
         try:
             return _detect_sep(lum, threshold_sigma, max_stars)
         except Exception:
             pass
+    if not _warned_no_sep:
+        warnings.warn(
+            "sep not installed — falling back to lower-quality scipy star detection",
+            RuntimeWarning, stacklevel=2)
+        _warned_no_sep = True
     return _detect_scipy(lum, threshold_sigma, max_stars)
 
 

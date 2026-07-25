@@ -81,12 +81,15 @@ def auto_process(session_dir: str | Path, out_dir: str | Path,
                        progress=progress, log=log)
     img = result.image
 
+    _STRETCH_OPS = {"ghs", "autostretch", "arcsinh", "histogram_stretch"}
     for step in AUTO_RECIPE_STEPS:
         try:
             img = apply_op(img, step["op"], **step["params"])
             _log(f"applied {step['op']}")
         except Exception as exc:  # a single failed cosmetic step shouldn't kill the run
             _log(f"SKIPPED {step['op']}: {exc}")
+            if step["op"] in _STRETCH_OPS:
+                _log("WARNING: stretch failed — output will look dark")
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
