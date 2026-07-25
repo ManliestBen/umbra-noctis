@@ -122,6 +122,26 @@ def arcsinh(img: AstroImage, factor: float = 30.0, black_point: float = 0.0) -> 
     return img.with_data(np.clip(out, 0.0, 1.0), linear=False)
 
 
+def _parse_points(points: str) -> tuple[np.ndarray, np.ndarray]:
+    """Parse a ``'x0,y0;x1,y1;...'`` control-point string. Duplicate x values
+    are deduped (last one wins) rather than raising, since PchipInterpolator
+    requires strictly increasing x. Raises a ValueError with a format hint on
+    any parse failure, distinct from the "need at least 2 points" case."""
+    try:
+        by_x: dict[float, float] = {}
+        for chunk in points.split(";"):
+            x_str, y_str = chunk.split(",")
+            by_x[float(x_str)] = float(y_str)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(
+            f"curves: points must look like '0,0;0.5,0.6;1,1' — got {points!r}"
+        ) from exc
+    if len(by_x) < 2:
+        raise ValueError("curves: need at least 2 control points")
+    xs_sorted = sorted(by_x)
+    return np.array(xs_sorted), np.array([by_x[x] for x in xs_sorted])
+
+
 @register_op(
     "curves", "Curves", "nonlinear",
     [Param("points", "str", "0,0;0.5,0.5;1,1",
@@ -134,11 +154,7 @@ def curves(img: AstroImage, points: str = "0,0;0.5,0.5;1,1",
     """Classic monotone-spline curves. An S-shape adds contrast; lifting only
     the lower-mid region brightens nebulosity. The 'saturation' channel
     applies the curve to color saturation instead of brightness."""
-    pts = sorted(tuple(float(v) for v in p.split(",")) for p in points.split(";"))
-    xs = np.array([p[0] for p in pts])
-    ys = np.array([p[1] for p in pts])
-    if len(pts) < 2:
-        raise ValueError("curves needs at least two control points")
+    xs, ys = _parse_points(points)
     spline = PchipInterpolator(xs, ys, extrapolate=True)
 
     def apply(v):

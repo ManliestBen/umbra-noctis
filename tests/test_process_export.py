@@ -111,6 +111,19 @@ def test_curves_and_saturation():
     assert chroma > chroma0
 
 
+def test_curves_rejects_malformed_points():
+    img = _color_img()
+    with pytest.raises(ValueError, match="points must look like"):
+        apply_op(img, "curves", points="not-a-point-list")
+    with pytest.raises(ValueError, match="points must look like"):
+        apply_op(img, "curves", points="0,0,0;1,1")  # too many values in a chunk
+    with pytest.raises(ValueError, match="at least 2 control points"):
+        apply_op(img, "curves", points="0.5,0.5")  # only one point
+    # Duplicate x values are deduped (last wins), not a crash.
+    out = apply_op(img, "curves", points="0,0;0.5,0.2;0.5,0.6;1,1")
+    assert out.data.shape == img.data.shape
+
+
 def test_recipe_roundtrip(tmp_path):
     img = _color_img()
     recipe = Recipe(name="test", steps=[
