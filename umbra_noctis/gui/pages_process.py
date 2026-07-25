@@ -29,10 +29,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-import umbra_noctis.process  # noqa: F401 — register ops
-
 from ..calib.masters import build_master
-from ..core.ops import OPS, apply_op
+from ..core.ops import OPS, apply_op, ensure_ops_loaded
 from ..export.summary import acquisition_caption
 from ..export.writers import export_image, save_comparison
 from ..recipes.auto import AUTO_RECIPE_STEPS
@@ -190,6 +188,7 @@ class ProcessPage(QWidget):
 
     def __init__(self, state: AppState, parent=None):
         super().__init__(parent)
+        ensure_ops_loaded()
         self.state = state
         self.worker = None
         self._param_widgets = {}

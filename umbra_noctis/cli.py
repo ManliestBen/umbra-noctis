@@ -166,8 +166,6 @@ def cmd_auto(args):
 
 
 def cmd_process(args):
-    import umbra_noctis.process  # noqa: F401
-
     from .core.image import AstroImage
     from .core.ops import apply_op
     from .export import export_image
@@ -201,9 +199,8 @@ def cmd_process(args):
 
 
 def cmd_ops(args):
-    import umbra_noctis.process  # noqa: F401
-
-    from .core.ops import OPS, ops_markdown
+    from .core.ops import OPS, ensure_ops_loaded, ops_markdown
+    ensure_ops_loaded()
     if args.markdown:
         print(ops_markdown())
         return
@@ -246,8 +243,6 @@ def cmd_solve(args):
 
 
 def cmd_planetary(args):
-    import umbra_noctis.process  # noqa: F401
-
     from .core.ops import apply_op
     from .export import export_image
     from .planetary import lucky_stack
