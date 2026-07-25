@@ -33,6 +33,7 @@ from ..calib.masters import build_master
 from ..core.ops import OPS, apply_op, ensure_ops_loaded
 from ..export.summary import acquisition_caption
 from ..export.writers import export_image, save_comparison
+from ..library import Library, resolve_target
 from ..recipes.auto import AUTO_RECIPE_STEPS
 from ..recipes.recipe import Recipe
 from ..stack.integrate import integrate
@@ -510,6 +511,20 @@ class ExportPage(QWidget):
             return
         out = export_image(self.state.current, path)
         self.status.setText(f"Exported {out}")
+        self._record_output(out)
+
+    def _record_output(self, out: Path) -> None:
+        """Catalog the export in the library — never let a library failure
+        (locked db, permissions, ...) block a successful export."""
+        if not self.state.session:
+            return
+        try:
+            lib = Library()
+            sid, _ = lib.import_session(self.state.session)
+            target = resolve_target(self.state.session.target)["canonical"]
+            lib.add_output(target=target, name=Path(out).stem, path=out, session_id=sid)
+        except Exception as exc:
+            self.status.setText(f"Exported {out}  (library not updated: {exc})")
 
     def export_comparison(self):
         if self.state.current is None or self.state.stacked is None:

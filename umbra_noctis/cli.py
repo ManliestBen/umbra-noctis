@@ -148,6 +148,8 @@ def cmd_stack(args):
 
 
 def cmd_auto(args):
+    from .ingest import parse_session
+    from .library import Library, resolve_target
     from .recipes import auto_process
     logs = []
 
@@ -163,6 +165,17 @@ def cmd_auto(args):
         print(f"  {p}")
     if any("SKIPPED" in m for m in logs):
         print("\nWARNING: one or more processing steps were skipped — check the log above.")
+
+    try:
+        session = parse_session(args.session)
+        lib = Library(db_path=args.db)
+        sid, _ = lib.import_session(session)
+        target = resolve_target(session.target)["canonical"]
+        for p in exported:
+            lib.add_output(target=target, name=p.stem, path=p, session_id=sid)
+        print(f"\n{len(exported)} output(s) recorded in the library -> {lib.db_path}")
+    except Exception as exc:
+        print(f"\n(library not updated: {exc})")
 
 
 def cmd_process(args):
@@ -423,6 +436,9 @@ def main(argv=None):
     p.add_argument("session")
     p.add_argument("-o", "--output", required=True, help="output directory")
     p.add_argument("--darks")
+    p.add_argument("--db", default=None,
+                   help="library database path (default ~/.umbra-noctis); "
+                        "exported outputs are recorded here")
     p.set_defaults(func=cmd_auto)
 
     p = sub.add_parser("process", help="apply operations/recipes to an image")

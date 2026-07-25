@@ -48,6 +48,26 @@ def test_import_and_library_targets(tmp_path, capsys):
     assert "M42" in out or "M 42" in out
 
 
+def test_outputs_recorded_after_auto(tmp_path, capsys):
+    from umbra_noctis.library import Library
+
+    d = tmp_path / "demo"
+    main(["demo-data", str(d), "--frames", "6"])
+    light_dir = next(d.glob("DWARF_RAW_*"))
+    db = tmp_path / "lib.db"
+    out_dir = tmp_path / "out"
+    capsys.readouterr()
+
+    main(["auto", str(light_dir), "-o", str(out_dir), "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "recorded in the library" in out
+
+    lib = Library(db_path=db)
+    rows = lib.outputs()
+    assert len(rows) >= 1
+    assert rows[0]["path"]
+
+
 def test_grade_prints_verdict_table(tmp_path, capsys):
     d = tmp_path / "demo"
     main(["demo-data", str(d), "--frames", "6"])
